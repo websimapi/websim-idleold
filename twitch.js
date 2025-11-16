@@ -18,6 +18,8 @@ export function initTwitch(channel, onChatter) {
     client.on('message', (channel, tags, message, self) => {
         if (self) return;
 
+        console.log(`[${tags['display-name']}]: ${message}`);
+
         const userId = tags['user-id'];
         const username = tags['display-name'];
         const now = Date.now();
