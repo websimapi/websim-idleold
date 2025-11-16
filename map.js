@@ -1,20 +1,16 @@
-export const TILE_TYPE = {
-    GRASS: 0,
-    TREE: 1,
-    LOGS: 2,
-    BUSHES: 3,
-};
+import { TILE_TYPE } from './map-tile-types.js';
 
 export class Map {
-    constructor(width, height, tileSize) {
-        this.width = width;
-        this.height = height;
+    constructor(tileSize) {
+        this.width = 256;
+        this.height = 256;
         this.tileSize = tileSize;
         this.grassTile = null;
         this.treeTile = null;
         this.logsTile = null;
         this.bushesTile = null;
         this.grid = [];
+        this.treeRespawns = [];
         this.viewportWidth = 0;
         this.viewportHeight = 0;
     }
@@ -42,7 +38,7 @@ export class Map {
             loadTile('./bushes.png').then(img => this.bushesTile = img)
         ]);
         
-        this.generateMap();
+        // Generation is now handled after loading data.
     }
     
     generateMap() {
@@ -55,6 +51,64 @@ export class Map {
             for (let i = 0; i < this.width; i++) {
                 // 1/16 chance to spawn a tree (1)
                 this.grid[j][i] = (Math.random() < TREE_CHANCE) ? TILE_TYPE.TREE : TILE_TYPE.GRASS;
+            }
+        }
+    }
+
+    cutTree(x, y) {
+        this.grid[y][x] = TILE_TYPE.LOGS;
+        this.scheduleTreeRespawn(x, y);
+    }
+
+    scheduleTreeRespawn(originalX, originalY, isRetry = false) {
+        const MIN_RESPAWN_MS = 5 * 60 * 1000; // 5 minutes
+        const MAX_RESPAWN_MS = 60 * 60 * 1000; // 1 hour
+        const respawnTime = Date.now() + MIN_RESPAWN_MS + Math.random() * (MAX_RESPAWN_MS - MIN_RESPAWN_MS);
+
+        this.treeRespawns.push({ originalX, originalY, respawnTime });
+        if (!isRetry) {
+             console.log(`Tree at (${originalX}, ${originalY}) will respawn around ${new Date(respawnTime).toLocaleTimeString()}`);
+        } else {
+             console.log(`Tree respawn for (${originalX}, ${originalY}) failed, retrying around ${new Date(respawnTime).toLocaleTimeString()}`);
+        }
+    }
+
+    update(players) {
+        const now = Date.now();
+        const respawnsToProcess = this.treeRespawns.filter(r => now >= r.respawnTime);
+
+        if (respawnsToProcess.length > 0) {
+            this.treeRespawns = this.treeRespawns.filter(r => now < r.respawnTime);
+
+            for (const respawn of respawnsToProcess) {
+                let spawned = false;
+                const RADIUS = 8;
+                const ATTEMPTS = 20;
+
+                for (let i = 0; i < ATTEMPTS; i++) {
+                    const angle = Math.random() * 2 * Math.PI;
+                    const distance = Math.random() * RADIUS;
+                    const newX = Math.round(respawn.originalX + Math.cos(angle) * distance);
+                    const newY = Math.round(respawn.originalY + Math.sin(angle) * distance);
+
+                    if (newX < 0 || newX >= this.width || newY < 0 || newY >= this.height) {
+                        continue;
+                    }
+
+                    const isOccupiedByTree = this.grid[newY][newX] === TILE_TYPE.TREE;
+                    const isOccupiedByPlayer = Array.from(players.values()).some(p => Math.round(p.pixelX) === newX && Math.round(p.pixelY) === newY);
+
+                    if (!isOccupiedByTree && !isOccupiedByPlayer) {
+                        this.grid[newY][newX] = TILE_TYPE.TREE;
+                        console.log(`Tree respawned at (${newX}, ${newY}) from original location (${respawn.originalX}, ${respawn.originalY})`);
+                        spawned = true;
+                        break;
+                    }
+                }
+
+                if (!spawned) {
+                    this.scheduleTreeRespawn(respawn.originalX, respawn.originalY, true);
+                }
             }
         }
     }

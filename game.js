@@ -2,7 +2,8 @@ import { Player } from './player.js';
 import { Map as GameMap } from './map.js';
 import { startChoppingCycle } from './player-actions.js';
 
-const STORAGE_PREFIX = 'twitch_game_players_';
+const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
+const MAP_STORAGE_PREFIX = 'twitch_game_map_';
 
 export class Game {
     constructor(canvas, channel) {
@@ -10,19 +11,23 @@ export class Game {
         this.ctx = canvas.getContext('2d');
         this.channel = channel; // Store channel name
         this.players = new Map();
-        this.map = new GameMap(640, 480, 1); // 640x480 grid size
+        this.map = new GameMap(32); // TileSize is 32
 
         this.focusedPlayerId = null;
         this.focusTimer = 0;
         this.FOCUS_DURATION = 60; // seconds
 
+        this.loadMap(); // Load map first
         this.loadPlayers(); // Load existing players on startup
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
         
         // Setup periodic save
-        this.saveInterval = setInterval(() => this.savePlayers(), 5000); // Save every 5 seconds
+        this.saveInterval = setInterval(() => {
+            this.savePlayers();
+            this.saveMap();
+        }, 5000); // Save every 5 seconds
     }
 
     resize() {
@@ -45,7 +50,7 @@ export class Game {
         }
         
         try {
-            localStorage.setItem(STORAGE_PREFIX + this.channel, JSON.stringify(playerStates));
+            localStorage.setItem(PLAYERS_STORAGE_PREFIX + this.channel, JSON.stringify(playerStates));
             // User requested console logging coordinates
             if (this.players.size > 0) {
                 const samplePlayer = this.players.values().next().value;
@@ -57,9 +62,41 @@ export class Game {
         }
     }
 
+    saveMap() {
+        const mapData = {
+            grid: this.map.grid,
+            treeRespawns: this.map.treeRespawns
+        };
+        try {
+            localStorage.setItem(MAP_STORAGE_PREFIX + this.channel, JSON.stringify(mapData));
+            console.log('[Persistence] Saved map data.');
+        } catch (e) {
+            console.error("Could not save map data to localStorage:", e);
+        }
+    }
+
+    loadMap() {
+        try {
+            const data = localStorage.getItem(MAP_STORAGE_PREFIX + this.channel);
+            if (data) {
+                const mapData = JSON.parse(data);
+                this.map.grid = mapData.grid;
+                this.map.treeRespawns = mapData.treeRespawns || [];
+                console.log('[Persistence] Loaded map data from localStorage.');
+            } else {
+                this.map.generateMap();
+                console.log('[Persistence] No map data found. Generated a new map.');
+                this.saveMap();
+            }
+        } catch(e) {
+            console.error("Could not load map data, generating new map.", e);
+            this.map.generateMap();
+        }
+    }
+
     loadPlayers() {
         try {
-            const data = localStorage.getItem(STORAGE_PREFIX + this.channel);
+            const data = localStorage.getItem(PLAYERS_STORAGE_PREFIX + this.channel);
             if (data) {
                 const playerStates = JSON.parse(data);
                 for (const id in playerStates) {
@@ -75,6 +112,11 @@ export class Game {
                 }
                 console.log(`[Persistence] Loaded ${this.players.size} player states from localStorage for channel ${this.channel}.`);
                 
+                // After loading all players and the map, validate their states
+                for (const player of this.players.values()) {
+                    player.validateState(this.map);
+                }
+
                 // Log data for active players as requested
                 console.log("--- Active Player Data on Load ---");
                 for (const player of this.players.values()) {
@@ -166,6 +208,8 @@ export class Game {
             this.chooseNewFocus();
             this.focusTimer = this.FOCUS_DURATION;
         }
+
+        this.map.update(this.players);
 
         for (const player of this.players.values()) {
             player.update(deltaTime, this.map);
