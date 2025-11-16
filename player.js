@@ -37,6 +37,7 @@ export class Player {
         this.actionTimer = 0;
         this.inventory = { logs: [], leaves: [] };
         this.pendingHarvest = []; // {x, y, type} for bushes
+        this.activeCommand = null;
         this.skills = {
             woodcutting: [],
             gathering: []
@@ -111,6 +112,7 @@ export class Player {
             inventory: this.inventory,
             state: this.state,
             actionTarget: this.actionTarget, // Save the action target
+            activeCommand: this.activeCommand,
             skills: this.skills,
         };
     }
@@ -146,6 +148,7 @@ export class Player {
         this.color = state.color || this.color;
         this.inventory = state.inventory || { logs: [], leaves: [] };
         this.skills = state.skills || { woodcutting: [], gathering: [] };
+        this.activeCommand = state.activeCommand || null;
 
         this.actionTarget = state.actionTarget || null; // Restore the action target
         this.state = state.state || PLAYER_STATE.IDLE;
@@ -201,6 +204,13 @@ export class Player {
                     this.flashState = 0;
                     this.state = PLAYER_STATE.IDLE; // Stop chopping if power runs out
                     return; 
+                }
+            }
+
+            // If player is idle but has an active command, restart the task.
+            if (this.state === PLAYER_STATE.IDLE && this.activeCommand) {
+                if (this.activeCommand === 'chop') {
+                    this.startChoppingCycle(gameMap);
                 }
             }
 

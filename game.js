@@ -96,11 +96,16 @@ export class Game {
 
     handlePlayerCommand(userId, command) {
         const player = this.players.get(userId);
-        if (!player || !player.isPowered()) return;
+        if (!player) return;
 
         if (command === 'chop') {
-            startChoppingCycle(player, this.map);
-            console.log(`Player ${player.username} initiated !chop command.`);
+            player.activeCommand = 'chop';
+            if (player.isPowered()) {
+                startChoppingCycle(player, this.map);
+                console.log(`Player ${player.username} initiated !chop command.`);
+            } else {
+                 console.log(`Player ${player.username} set !chop command. It will start when they have energy.`);
+            }
         }
     }
 
