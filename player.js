@@ -6,8 +6,8 @@ export class Player {
         this.energy = 1; // Start with 1 hour of energy
 
         // Position in grid coordinates
-        this.x = Math.floor(Math.random() * 256);
-        this.y = Math.floor(Math.random() * 256);
+        this.x = Math.floor(Math.random() * 640);
+        this.y = Math.floor(Math.random() * 480);
 
         // For smooth movement
         this.pixelX = this.x;
@@ -62,10 +62,11 @@ export class Player {
         this.targetY = Math.max(0, Math.min(mapHeight - 1, newY));
     }
 
-    render(ctx, tileSize) {
+    render(ctx, tileSize, cameraX, cameraY) {
         const radius = tileSize / 2.5;
-        const screenX = this.pixelX * tileSize + tileSize / 2;
-        const screenY = this.pixelY * tileSize + tileSize / 2;
+        // Apply camera offset
+        const screenX = (this.pixelX * tileSize + tileSize / 2) - cameraX;
+        const screenY = (this.pixelY * tileSize + tileSize / 2) - cameraY;
 
         ctx.fillStyle = this.color;
         ctx.beginPath();
