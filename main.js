@@ -18,7 +18,7 @@ function startGame(channel) {
     console.log(`Connecting to #${channel}...`);
     showGame();
 
-    const game = new Game(canvas);
+    const game = new Game(canvas, channel);
     
     initTwitch(channel, (chatter) => {
         game.addOrUpdatePlayer(chatter);
@@ -46,4 +46,3 @@ const savedChannel = localStorage.getItem(STORAGE_KEY);
 if (savedChannel) {
     channelInput.value = savedChannel;
 }
-

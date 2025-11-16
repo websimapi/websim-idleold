@@ -18,11 +18,19 @@ export function initTwitch(channel, onChatter) {
     client.on('message', (channel, tags, message, self) => {
         if (self) return;
 
-        console.log(`[${tags['display-name']}]: ${message}`);
-
         const userId = tags['user-id'];
         const username = tags['display-name'];
         const now = Date.now();
+        
+        // Log message first (as requested by user), providing a fallback display name
+        console.log(`[${username || userId || 'System'}]: ${message}`);
+
+        // Critical check: Ensure we have a user ID for tracking player state.
+        // If userId is missing, it prevents the creation of a chatter object 
+        // with an undefined ID, which might cause downstream issues in Game.addOrUpdatePlayer.
+        if (!userId) {
+            return;
+        }
 
         const lastChatter = recentChatters.get(userId);
 

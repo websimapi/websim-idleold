@@ -1,10 +1,13 @@
 import { Player } from './player.js';
 import { Map as GameMap } from './map.js';
 
+const STORAGE_PREFIX = 'twitch_game_players_';
+
 export class Game {
-    constructor(canvas) {
+    constructor(canvas, channel) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        this.channel = channel; // Store channel name
         this.players = new Map();
         this.map = new GameMap(640, 480, 1); // 640x480 grid size
 
@@ -12,8 +15,13 @@ export class Game {
         this.focusTimer = 0;
         this.FOCUS_DURATION = 60; // seconds
 
+        this.loadPlayers(); // Load existing players on startup
+
         this.resize();
         window.addEventListener('resize', () => this.resize());
+        
+        // Setup periodic save
+        this.saveInterval = setInterval(() => this.savePlayers(), 5000); // Save every 5 seconds
     }
 
     resize() {
@@ -27,21 +35,78 @@ export class Game {
         this.map.setViewport(this.canvas.width, this.canvas.height);
     }
 
+    savePlayers() {
+        if (this.players.size === 0) return;
+
+        const playerStates = {};
+        for (const player of this.players.values()) {
+            playerStates[player.id] = player.getState();
+        }
+        
+        try {
+            localStorage.setItem(STORAGE_PREFIX + this.channel, JSON.stringify(playerStates));
+            // User requested console logging coordinates
+            if (this.players.size > 0) {
+                const samplePlayer = this.players.values().next().value;
+                const energyCount = samplePlayer.energyTimestamps ? samplePlayer.energyTimestamps.length : 0;
+                console.log(`[Persistence] Saved state. Sample Player (${samplePlayer.username}): Position (${samplePlayer.pixelX.toFixed(2)}, ${samplePlayer.pixelY.toFixed(2)}), Energy Cells: ${energyCount}`);
+            }
+        } catch (e) {
+            console.error("Could not save player data to localStorage:", e);
+        }
+    }
+
+    loadPlayers() {
+        try {
+            const data = localStorage.getItem(STORAGE_PREFIX + this.channel);
+            if (data) {
+                const playerStates = JSON.parse(data);
+                for (const id in playerStates) {
+                    const state = playerStates[id];
+                    
+                    // Sanity check: ensure required data is present
+                    if (state && state.id && state.username) {
+                        // Instantiate player using persisted info
+                        const player = new Player(state.id, state.username, state.color);
+                        player.loadState(state);
+                        this.players.set(id, player);
+                    }
+                }
+                console.log(`[Persistence] Loaded ${this.players.size} player states from localStorage for channel ${this.channel}.`);
+                
+                // If players were loaded, ensure focus is set if possible
+                if (this.players.size > 0 && !this.focusedPlayerId) {
+                    this.chooseNewFocus();
+                }
+            }
+        } catch (e) {
+            console.error("Could not load player data from localStorage:", e);
+        }
+    }
+
     addOrUpdatePlayer(chatter) {
-        if (!this.players.has(chatter.id)) {
+        let player = this.players.get(chatter.id);
+
+        if (!player) {
+            // Truly new player (not in persistence or current map)
             const player = new Player(chatter.id, chatter.username, chatter.color);
             this.players.set(chatter.id, player);
             console.log(`Player ${chatter.username} joined.`);
-            // If no focus is set, immediately focus on the first player
+            
+            // Initialize focus if necessary
             if (!this.focusedPlayerId) {
                 this.focusedPlayerId = chatter.id;
                 this.focusTimer = this.FOCUS_DURATION;
             }
         } else {
-            const player = this.players.get(chatter.id);
-            player.addEnergy();
-            console.log(`Player ${chatter.username} gained energy.`);
+             // Existing player (loaded from storage or currently active)
+             // Update volatile data like username/color which might change
+             player.username = chatter.username;
+             player.color = chatter.color;
         }
+
+        player.addEnergy();
+        console.log(`Player ${chatter.username} gained energy. Current energy cells: ${player.energyTimestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
     }
 
     start() {
@@ -75,15 +140,21 @@ export class Game {
     }
     
     chooseNewFocus() {
-        const playerIds = Array.from(this.players.keys());
-        if (playerIds.length === 0) {
+        // Only focus on players who are currently powered
+        const activePlayers = Array.from(this.players.values()).filter(p => p.isPowered());
+        
+        if (activePlayers.length === 0) {
             this.focusedPlayerId = null;
+            this.focusTimer = this.FOCUS_DURATION; // Reset timer so it tries again soon
+            console.log("No active players to focus on.");
             return;
         }
 
-        const randomIndex = Math.floor(Math.random() * playerIds.length);
-        this.focusedPlayerId = playerIds[randomIndex];
-        console.log(`Camera focusing on: ${this.players.get(this.focusedPlayerId).username} for ${this.FOCUS_DURATION} seconds.`);
+        const randomIndex = Math.floor(Math.random() * activePlayers.length);
+        const player = activePlayers[randomIndex];
+        
+        this.focusedPlayerId = player.id;
+        console.log(`Camera focusing on: ${player.username} for ${this.FOCUS_DURATION} seconds.`);
     }
 
     render() {
@@ -137,8 +208,11 @@ export class Game {
 
         this.map.render(this.ctx, cameraX, cameraY);
         
+        // Only render players who are currently powered
         for (const player of this.players.values()) {
-            player.render(this.ctx, tileSize, cameraX, cameraY);
+            if (player.isPowered()) {
+                player.render(this.ctx, tileSize, cameraX, cameraY);
+            }
         }
     }
 }
