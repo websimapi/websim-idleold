@@ -1,5 +1,6 @@
 import { initTwitch } from './twitch.js';
 import { Game } from './game.js';
+import { AudioManager } from './audio-manager.js';
 
 const connectContainer = document.getElementById('connect-container');
 const gameContainer = document.getElementById('game-container');
@@ -18,11 +19,19 @@ function startGame(channel) {
     console.log(`Connecting to #${channel}...`);
     showGame();
 
+    AudioManager.init();
+
     const game = new Game(canvas, channel);
     
-    initTwitch(channel, (chatter) => {
-        game.addOrUpdatePlayer(chatter);
-    });
+    initTwitch(
+        channel, 
+        (chatter) => { // onChatter for energy
+            game.addOrUpdatePlayer(chatter);
+        },
+        (userId, command) => { // onCommand
+            game.handlePlayerCommand(userId, command);
+        }
+    );
 
     game.start();
 }

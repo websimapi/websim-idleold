@@ -1,5 +1,6 @@
 import { Player } from './player.js';
 import { Map as GameMap } from './map.js';
+import { startChoppingCycle } from './player-actions.js';
 
 const STORAGE_PREFIX = 'twitch_game_players_';
 
@@ -84,6 +85,16 @@ export class Game {
         }
     }
 
+    handlePlayerCommand(userId, command) {
+        const player = this.players.get(userId);
+        if (!player || !player.isPowered()) return;
+
+        if (command === 'chop') {
+            startChoppingCycle(player, this.map);
+            console.log(`Player ${player.username} initiated !chop command.`);
+        }
+    }
+
     addOrUpdatePlayer(chatter) {
         if (!chatter || !chatter.id) {
             console.error("Attempted to add or update player with invalid chatter data:", chatter);
@@ -93,8 +104,12 @@ export class Game {
 
         if (!player) {
             // Truly new player (not in persistence or current map)
-            const player = new Player(chatter.id, chatter.username, chatter.color);
+            player = new Player(chatter.id, chatter.username, chatter.color);
             this.players.set(chatter.id, player);
+            
+            // Ensure player is positioned correctly on the map, avoiding obstacles
+            player.setInitialPosition(this.map);
+
             console.log(`Player ${chatter.username} joined.`);
             
             // Initialize focus if necessary
@@ -110,7 +125,7 @@ export class Game {
         }
 
         player.addEnergy();
-        console.log(`Player ${chatter.username} gained energy. Current energy cells: ${player.energyTimestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
+        console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energyTimestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
     }
 
     start() {
@@ -139,7 +154,7 @@ export class Game {
         }
 
         for (const player of this.players.values()) {
-            player.update(deltaTime, this.map.width, this.map.height);
+            player.update(deltaTime, this.map);
         }
     }
     

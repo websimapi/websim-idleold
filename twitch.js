@@ -3,7 +3,7 @@ import tmi from 'tmi.js';
 const ENERGY_COOLDOWN = 10 * 60 * 1000; // 10 minutes in milliseconds
 const recentChatters = new Map();
 
-export function initTwitch(channel, onChatter) {
+export function initTwitch(channel, onChatter, onCommand) {
     const client = new tmi.Client({
         options: { debug: false },
         connection: {
@@ -43,6 +43,13 @@ export function initTwitch(channel, onChatter) {
             };
             recentChatters.set(userId, chatterData);
             onChatter(chatterData);
+        }
+
+        // Handle commands on every message
+        if (message.trim().toLowerCase() === '!chop') {
+            if (onCommand) {
+                onCommand(userId, 'chop');
+            }
         }
     });
 }

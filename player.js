@@ -1,47 +1,77 @@
+import { PLAYER_STATE } from './player-state.js';
+import { updateAction, startChoppingCycle } from './player-actions.js';
+import { renderPlayer } from './player-renderer.js';
+
 export const ENERGY_DURATION_MS = 3600 * 1000; // 1 hour (3600 seconds)
 
 const MAX_ENERGY_SLOTS = 12;
-// Block characters representing 0/8 to 7/8 fill. Index 0 is empty, Index 7 is nearly full/full.
-const PARTIAL_BLOCKS = [
-    ' ', // 0/8 (Space)
-    '▂', // 1/8
-    '▃', // 2/8
-    '▄', // 3/8
-    '▅', // 4/8
-    '▆', // 5/8
-    '▇', // 6/8
-    '█'  // 7/8 (Full)
-];
-
-const FILLED_BLOCK = '█'; // Full Block
-const EMPTY_BLOCK_VISUAL = '▒'; // Visual representation for empty slots
-const BASE_COLOR_RGB = '173, 216, 230'; // Light Blue RGB components
-const FILLED_COLOR = `rgb(${BASE_COLOR_RGB})`; // Light Blue
-const EMPTY_COLOR_ALPHA = `rgba(${BASE_COLOR_RGB}, 0.4)`; // Semi-transparent Light Blue
 
 export class Player {
     constructor(id, username, color) {
         this.id = id;
         this.username = username;
         this.color = color;
-        // this.energy = 1; // Start with 1 hour of energy
         this.energyTimestamps = []; // Use timestamps for cell tracking
 
         // Position in grid coordinates
-        this.x = Math.floor(Math.random() * 640);
-        this.y = Math.floor(Math.random() * 480);
+        this.x = 0;
+        this.y = 0;
 
         // For smooth movement
-        this.pixelX = this.x;
-        this.pixelY = this.y;
-        this.targetX = this.x;
-        this.targetY = this.y;
+        this.pixelX = 0;
+        this.pixelY = 0;
+        this.targetX = 0;
+        this.targetY = 0;
+        
+        this.isPositioned = false; // Flag to track initialization
 
         this.speed = 1; // tiles per second
         this.moveCooldown = 2 + Math.random() * 5; // time to wait before picking new target
         this.lastEnergyLogTime = 0; // Initialize log throttle
         this.currentCellDrainRatio = 0; // 0 (full) to 1 (empty)
         this.flashState = 0; // For subtle flashing effect
+
+        // Chopping state
+        this.state = PLAYER_STATE.IDLE;
+        this.actionTarget = null; // {x, y} of the tree, logs, etc.
+        this.actionTimer = 0;
+        this.inventory = { logs: [], leaves: [] };
+        this.pendingHarvest = []; // {x, y, type} for bushes
+    }
+
+    setInitialPosition(gameMap) {
+        if (this.isPositioned) return;
+        
+        const mapWidth = gameMap.width;
+        const mapHeight = gameMap.height;
+
+        let attempts = 0;
+        let foundSpot = false;
+        let newX, newY;
+
+        while (attempts < 100 && !foundSpot) {
+            newX = Math.floor(Math.random() * mapWidth);
+            newY = Math.floor(Math.random() * mapHeight);
+            
+            if (!gameMap.isColliding(newX, newY)) {
+                foundSpot = true;
+                this.x = newX;
+                this.y = newY;
+                this.pixelX = newX;
+                this.pixelY = newY;
+                this.targetX = newX;
+                this.targetY = newY;
+                this.isPositioned = true;
+                break;
+            }
+            attempts++;
+        }
+        
+        if (!foundSpot) {
+            console.warn(`Could not find a safe initial spawn point for ${this.username}. Placing at (0, 0).`);
+            // Fallback: If map is full of trees, still mark as positioned
+            this.isPositioned = true;
+        }
     }
 
     addEnergy() {
@@ -62,7 +92,10 @@ export class Player {
             color: this.color,
             energyTimestamps: this.energyTimestamps, // Store timestamps
             pixelX: this.pixelX,
-            pixelY: this.pixelY
+            pixelY: this.pixelY,
+            inventory: this.inventory,
+            state: this.state,
+            actionTarget: this.actionTarget, // Save the action target
         };
     }
 
@@ -76,6 +109,7 @@ export class Player {
             
             this.x = Math.round(state.pixelX);
             this.y = Math.round(state.pixelY);
+            this.isPositioned = true; // Loaded state implies positioned
         }
         
         // Load energyTimestamps
@@ -94,9 +128,19 @@ export class Player {
         
         this.username = state.username || this.username;
         this.color = state.color || this.color;
+        this.inventory = state.inventory || { logs: [], leaves: [] };
+
+        this.actionTarget = state.actionTarget || null; // Restore the action target
+        this.state = state.state || PLAYER_STATE.IDLE;
+        
+        // If restoring a chopping state, ensure the action target is valid.
+        if (this.state === PLAYER_STATE.CHOPPING && !this.actionTarget) {
+            console.warn(`[${this.username}] Restored to CHOPPING state without a valid actionTarget. Resetting to IDLE.`);
+            this.state = PLAYER_STATE.IDLE;
+        }
     }
 
-    update(deltaTime, mapWidth, mapHeight) {
+    update(deltaTime, gameMap) {
         
         if (this.isPowered()) {
             // 1. Energy Draining Logic
@@ -138,170 +182,22 @@ export class Player {
                 if (!this.isPowered()) {
                     this.currentCellDrainRatio = 0; // Reset ratio if no power
                     this.flashState = 0;
+                    this.state = PLAYER_STATE.IDLE; // Stop chopping if power runs out
                     return; 
                 }
             }
 
-            // 2. Movement Logic (Only continues if powered)
-            this.moveCooldown -= deltaTime;
-            if (this.moveCooldown <= 0) {
-                this.pickNewTarget(mapWidth, mapHeight);
-                this.moveCooldown = 2 + Math.random() * 5; // reset cooldown
-            }
+            // State Machine for actions
+            updateAction(this, deltaTime, gameMap);
 
-            // Move towards target
-            const dx = this.targetX - this.pixelX;
-            const dy = this.targetY - this.pixelY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist > 0.01) {
-                const moveAmount = this.speed * deltaTime;
-                this.pixelX += (dx / dist) * moveAmount;
-                this.pixelY += (dy / dist) * moveAmount;
-            } else {
-                this.pixelX = this.targetX;
-                this.pixelY = this.targetY;
-            }
         }
     }
 
-    pickNewTarget(mapWidth, mapHeight) {
-        const dir = Math.floor(Math.random() * 4);
-        let newX = this.targetX;
-        let newY = this.targetY;
-
-        switch (dir) {
-            case 0: newY--; break; // Up
-            case 1: newY++; break; // Down
-            case 2: newX--; break; // Left
-            case 3: newX++; break; // Right
-        }
-
-        // Clamp to map bounds
-        this.targetX = Math.max(0, Math.min(mapWidth - 1, newX));
-        this.targetY = Math.max(0, Math.min(mapHeight - 1, newY));
+    startChoppingCycle(gameMap) {
+        startChoppingCycle(this, gameMap);
     }
 
     render(ctx, tileSize, cameraX, cameraY) {
-        const radius = tileSize / 2.5;
-        // Apply camera offset
-        const screenX = (this.pixelX * tileSize + tileSize / 2) - cameraX;
-        const screenY = (this.pixelY * tileSize + tileSize / 2) - cameraY;
-
-        ctx.save();
-        
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Default player stroke
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Draw Nametag Label
-        // Use a minimum font size of 12px for readability, scaling up with tileSize
-        const baseFontSize = Math.max(12, tileSize * 0.6); 
-        const fontSize = Math.max(10, baseFontSize * (2/3)); // Apply 2/3 scaling, ensuring a minimum size of 10px
-        ctx.font = `${fontSize}px Arial, sans-serif`;
-        
-        // Setup for text rendering
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        
-        // Text color and stroke for visibility against any background
-        ctx.fillStyle = 'white';
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.lineWidth = 3; // Thicker stroke for visibility
-
-        const tagY = screenY - radius - 18; // Position slightly above the player circle, moved up 10px (8 + 10 = 18)
-        
-        // Draw Username
-        ctx.strokeText(this.username, screenX, tagY);
-        ctx.fillText(this.username, screenX, tagY);
-        
-        // Draw Energy Bar
-        if (this.isPowered()) {
-            this.drawEnergyBar(ctx, screenX, tagY, fontSize);
-        }
-        
-        ctx.restore();
-    }
-    
-    drawEnergyBar(ctx, screenX, usernameTagY, usernameFontSize) {
-        if (this.energyTimestamps.length === 0) return;
-
-        // Energy Bar Specific Font Setup
-        const barFontSize = usernameFontSize * 0.7; 
-        ctx.font = `${barFontSize}px monospace`; 
-        ctx.textAlign = 'center';
-        // Ensure the bar renders just below the username by using a top baseline
-        ctx.textBaseline = 'top';
-
-        // Determine Y position for the energy bar, hugging the username tag but not overlapping
-        const verticalOffset = 2; // small spacing to avoid clipping into the label
-        const barY = usernameTagY + verticalOffset;
-
-        // Measure the width of a single block character consistently
-        const blockWidth = ctx.measureText(FILLED_BLOCK).width;
-        const totalBarWidth = blockWidth * MAX_ENERGY_SLOTS;
-        const startX = screenX - totalBarWidth / 2;
-
-        const totalEnergyCells = this.energyTimestamps.length;
-        
-        // Calculate remaining ratio (1.0 = full, 0.0 = empty) for the draining cell (index 0)
-        const remainingRatio = 1 - this.currentCellDrainRatio;
-        
-        // Calculate the index for PARTIAL_BLOCKS array (0 to 7) based on 8 levels of granularity
-        const partialBlockIndex = Math.max(0, Math.min(PARTIAL_BLOCKS.length - 1, Math.floor(remainingRatio * PARTIAL_BLOCKS.length)));
-        
-        for (let i = 0; i < MAX_ENERGY_SLOTS; i++) {
-            let block = EMPTY_BLOCK_VISUAL;
-            let isDrainingCell = false;
-
-            if (i < totalEnergyCells) {
-                // Determine the index 'cellIndex' in this.energyTimestamps corresponding to visual slot 'i'
-                // We reverse the visual order: i=0 (leftmost filled) maps to newest cell; i=totalEnergyCells-1 maps to oldest (draining) cell.
-                const cellIndex = totalEnergyCells - 1 - i; 
-
-                if (cellIndex === 0) {
-                    // This is the currently draining cell (it is the rightmost filled block)
-                    block = PARTIAL_BLOCKS[partialBlockIndex];
-                    isDrainingCell = true;
-                } else if (cellIndex > 0) {
-                    // This is a full, reserved cell (cellIndex > 0)
-                    block = FILLED_BLOCK;
-                }
-            } 
-
-            // Calculate current block's center X position
-            const currentBlockCenterX = startX + (i * blockWidth) + (blockWidth / 2);
-
-            ctx.save(); 
-
-            // Set color based on fill status
-            if (i < totalEnergyCells) {
-                // If this is the draining cell, apply the pulsating alpha effect directly to the fill style
-                if (isDrainingCell) {
-                    // Use flashState (0 to 1) for subtle oscillation on opacity (e.g., 60% to 100%)
-                    const alpha = 0.6 + this.flashState * 0.4; 
-                    ctx.fillStyle = `rgba(${BASE_COLOR_RGB}, ${alpha})`;
-                } else {
-                    // Filled block (Light Blue, fixed opacity)
-                    ctx.fillStyle = FILLED_COLOR;
-                }
-            } else {
-                // Empty block (Semi-transparent Light Blue)
-                ctx.fillStyle = EMPTY_COLOR_ALPHA;
-            }
-
-            // Draw the block character
-            ctx.fillText(block, currentBlockCenterX, barY);
-            
-            ctx.restore(); 
-        }
+        renderPlayer(ctx, this, tileSize, cameraX, cameraY);
     }
 }
