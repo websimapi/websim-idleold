@@ -143,6 +143,32 @@ export class Map {
         return nearest;
     }
 
+    findNearestInRadius(x, y, tileTypes, radius) {
+        let nearest = null;
+        let minDistance = Infinity;
+
+        const startX = Math.max(0, Math.floor(x - radius));
+        const endX = Math.min(this.width - 1, Math.ceil(x + radius));
+        const startY = Math.max(0, Math.floor(y - radius));
+        const endY = Math.min(this.height - 1, Math.ceil(y + radius));
+
+        for (let j = startY; j <= endY; j++) {
+            for (let i = startX; i <= endX; i++) {
+                const tileType = this.grid[j][i];
+                if (tileTypes.includes(tileType)) {
+                    const dx = i - x;
+                    const dy = j - y;
+                    const distance = dx * dx + dy * dy;
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearest = { x: i, y: j, type: tileType };
+                    }
+                }
+            }
+        }
+        return nearest;
+    }
+
     getTallObjects(drawStartX, drawEndX, drawStartY, drawEndY) {
         const tallObjects = [];
         for (let j = drawStartY; j < drawEndY; j++) {

@@ -46,9 +46,14 @@ export function initTwitch(channel, onChatter, onCommand) {
         }
 
         // Handle commands on every message
-        if (message.trim().toLowerCase() === '!chop') {
+        const command = message.trim().toLowerCase();
+        if (command === '!chop') {
             if (onCommand) {
                 onCommand(userId, 'chop');
+            }
+        } else if (command === '!gather') {
+            if (onCommand) {
+                onCommand(userId, 'gather');
             }
         }
     });

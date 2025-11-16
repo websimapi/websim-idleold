@@ -1,5 +1,5 @@
 import { PLAYER_STATE } from './player-state.js';
-import { updateAction, startChoppingCycle, setChopTarget } from './player-actions.js';
+import { updateAction, startChoppingCycle, setChopTarget, startGatheringCycle } from './player-actions.js';
 import { renderPlayer } from './player-renderer.js';
 import { TILE_TYPE } from './map-tile-types.js';
 
@@ -39,6 +39,7 @@ export class Player {
         this.inventory = { logs: [], leaves: [] };
         this.pendingHarvest = []; // {x, y, type} for bushes
         this.activeCommand = null;
+        this.lastSearchPosition = null; // For gathering wander logic
         this.skills = {
             woodcutting: [],
             gathering: []
@@ -115,6 +116,7 @@ export class Player {
             actionTarget: this.actionTarget, // Save the action target
             pendingHarvest: this.pendingHarvest,
             activeCommand: this.activeCommand,
+            lastSearchPosition: this.lastSearchPosition,
             skills: this.skills,
         };
     }
@@ -152,6 +154,7 @@ export class Player {
         this.pendingHarvest = state.pendingHarvest || [];
         this.skills = state.skills || { woodcutting: [], gathering: [] };
         this.activeCommand = state.activeCommand || null;
+        this.lastSearchPosition = state.lastSearchPosition || null;
 
         this.actionTarget = state.actionTarget || null; // Restore the action target
         this.state = state.state || PLAYER_STATE.IDLE;
@@ -252,6 +255,9 @@ export class Player {
                 if (this.activeCommand === 'chop') {
                     this.startChoppingCycle(gameMap);
                 }
+                if (this.activeCommand === 'gather') {
+                    this.startGatheringCycle(gameMap);
+                }
             }
 
             // State Machine for actions
@@ -262,6 +268,10 @@ export class Player {
 
     startChoppingCycle(gameMap) {
         startChoppingCycle(this, gameMap);
+    }
+
+    startGatheringCycle(gameMap) {
+        startGatheringCycle(this, gameMap);
     }
 
     render(ctx, tileSize, cameraX, cameraY) {

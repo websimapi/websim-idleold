@@ -1,6 +1,6 @@
 import { Player } from './player.js';
 import { Map as GameMap } from './map.js';
-import { startChoppingCycle } from './player-actions.js';
+import { startChoppingCycle, startGatheringCycle } from './player-actions.js';
 
 const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
 const MAP_STORAGE_PREFIX = 'twitch_game_map_';
@@ -147,6 +147,14 @@ export class Game {
                 console.log(`Player ${player.username} initiated !chop command.`);
             } else {
                  console.log(`Player ${player.username} set !chop command. It will start when they have energy.`);
+            }
+        } else if (command === 'gather') {
+            player.activeCommand = 'gather';
+            if (player.isPowered()) {
+                startGatheringCycle(player, this.map);
+                console.log(`Player ${player.username} initiated !gather command.`);
+            } else {
+                console.log(`Player ${player.username} set !gather command. It will start when it has energy.`);
             }
         }
     }

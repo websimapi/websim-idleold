@@ -6,5 +6,6 @@ export const PLAYER_STATE = {
     HARVESTING_LOGS: 'harvesting_logs',
     MOVING_TO_BUSHES: 'moving_to_bushes',
     HARVESTING_BUSHES: 'harvesting_bushes',
+    SEARCHING_FOR_GATHERABLE: 'searching_for_gatherable',
+    WANDERING_TO_GATHER: 'wandering_to_gather',
 };
-

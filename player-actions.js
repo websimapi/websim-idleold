@@ -70,7 +70,12 @@ function finishHarvestingLogs(player, gameMap) {
     player.addExperience('woodcutting', numLogs);
     player.addExperience('gathering', 2);
     gameMap.grid[player.actionTarget.y][player.actionTarget.x] = TILE_TYPE.GRASS;
-    harvestNextBush(player, gameMap);
+    
+    if (player.activeCommand === 'gather') {
+        startGatheringCycle(player, gameMap);
+    } else {
+        harvestNextBush(player, gameMap);
+    }
 }
 
 function harvestNextBush(player, gameMap) {
@@ -97,12 +102,43 @@ function finishHarvestingBushes(player, gameMap) {
     console.log(`[${player.username}] Harvested ${numLeaves} leaves. Total: ${totalLeaves}. Timestamp: ${Date.now()}`);
     player.addExperience('gathering', 1);
     gameMap.grid[player.actionTarget.y][player.actionTarget.x] = TILE_TYPE.GRASS;
-    harvestNextBush(player, gameMap);
+    
+    if (player.activeCommand === 'gather') {
+        startGatheringCycle(player, gameMap);
+    } else {
+        harvestNextBush(player, gameMap);
+    }
 }
 
 export function startChoppingCycle(player, gameMap) {
     console.log(`[${player.username}] Starting chopping cycle. Timestamp: ${Date.now()}`);
     findAndMoveToTree(player, gameMap);
+}
+
+export function startGatheringCycle(player, gameMap) {
+    player.state = PLAYER_STATE.SEARCHING_FOR_GATHERABLE;
+    console.log(`[${player.username}] Starting gathering cycle, searching for resources.`);
+    
+    const searchRadius = 16;
+    const gatherableTypes = [TILE_TYPE.LOGS, TILE_TYPE.BUSHES];
+    const nearest = gameMap.findNearestInRadius(player.pixelX, player.pixelY, gatherableTypes, searchRadius);
+
+    if (nearest) {
+        player.actionTarget = nearest;
+        player.targetX = nearest.x;
+        player.targetY = nearest.y;
+        
+        if (nearest.type === TILE_TYPE.LOGS) {
+            player.state = PLAYER_STATE.MOVING_TO_LOGS;
+        } else if (nearest.type === TILE_TYPE.BUSHES) {
+            player.state = PLAYER_STATE.MOVING_TO_BUSHES;
+        }
+        console.log(`[${player.username}] Found gatherable at (${nearest.x}, ${nearest.y}). Moving to harvest.`);
+    } else {
+        console.log(`[${player.username}] No gatherables found within ${searchRadius} tiles. Wandering...`);
+        player.state = PLAYER_STATE.WANDERING_TO_GATHER;
+        player.lastSearchPosition = { x: player.pixelX, y: player.pixelY };
+    }
 }
 
 export function findAndMoveToTree(player, gameMap) {
@@ -167,6 +203,17 @@ export function updateAction(player, deltaTime, gameMap) {
             if (atActionTarget) {
                 if (player.state === PLAYER_STATE.MOVING_TO_LOGS) beginHarvestingLogs(player);
                 else if (player.state === PLAYER_STATE.MOVING_TO_BUSHES) beginHarvestingBushes(player);
+            }
+            break;
+
+        case PLAYER_STATE.WANDERING_TO_GATHER:
+            updateWander(player, deltaTime, gameMap);
+            const distFromSearch = Math.sqrt(
+                (player.pixelX - player.lastSearchPosition.x)**2 +
+                (player.pixelY - player.lastSearchPosition.y)**2
+            );
+            if (distFromSearch > 8) {
+                startGatheringCycle(player, gameMap);
             }
             break;
 
