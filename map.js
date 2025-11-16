@@ -46,6 +46,29 @@ export class Map {
         const mapPixelHeight = this.height * this.tileSize;
 
         ctx.fillRect(0, 0, mapPixelWidth, mapPixelHeight);
+
+        // Draw grid lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Subtle grid lines
+        ctx.lineWidth = 1;
+
+        // Vertical lines
+        for (let i = 0; i <= this.width; i++) {
+            const x = i * this.tileSize;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, mapPixelHeight);
+            ctx.stroke();
+        }
+
+        // Horizontal lines
+        for (let j = 0; j <= this.height; j++) {
+            const y = j * this.tileSize;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(mapPixelWidth, y);
+            ctx.stroke();
+        }
+        
         ctx.restore();
     }
 }
