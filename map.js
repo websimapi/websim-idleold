@@ -14,6 +14,10 @@ export class Map {
         this.viewportHeight = height;
     }
 
+    setTileSize(size) {
+        this.tileSize = size;
+    }
+
     async loadAssets() {
         return new Promise((resolve) => {
             this.grassTile = new Image();
@@ -37,11 +41,11 @@ export class Map {
 
         ctx.fillStyle = this.pattern;
         
-        // We only need to draw what's visible in the viewport
-        const renderWidth = Math.min(this.width * this.tileSize, this.viewportWidth);
-        const renderHeight = Math.min(this.height * this.tileSize, this.viewportHeight);
+        // Calculate the total pixel size of the map
+        const mapPixelWidth = this.width * this.tileSize;
+        const mapPixelHeight = this.height * this.tileSize;
 
-        ctx.fillRect(cameraX, cameraY, renderWidth, renderHeight);
+        ctx.fillRect(0, 0, mapPixelWidth, mapPixelHeight);
         ctx.restore();
     }
 }

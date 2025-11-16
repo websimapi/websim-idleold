@@ -6,7 +6,7 @@ export class Game {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.players = new Map();
-        this.map = new GameMap(256, 256, 32);
+        this.map = new GameMap(256, 256, 1); // Initial tile size 1, will be set correctly in resize()
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -15,6 +15,13 @@ export class Game {
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        
+        // Calculate tileSize to fit 256x256 grid entirely within the viewport
+        const tileSizeX = this.canvas.width / this.map.width;
+        const tileSizeY = this.canvas.height / this.map.height;
+        const calculatedTileSize = Math.min(tileSizeX, tileSizeY);
+
+        this.map.setTileSize(calculatedTileSize);
         this.map.setViewport(this.canvas.width, this.canvas.height);
     }
 
