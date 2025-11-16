@@ -75,6 +75,15 @@ export class Game {
                 }
                 console.log(`[Persistence] Loaded ${this.players.size} player states from localStorage for channel ${this.channel}.`);
                 
+                // Log data for active players as requested
+                console.log("--- Active Player Data on Load ---");
+                for (const player of this.players.values()) {
+                    if (player.isPowered()) {
+                        console.log(`User data for ${player.username}:`, player.getState());
+                    }
+                }
+                console.log("------------------------------------");
+
                 // If players were loaded, ensure focus is set if possible
                 if (this.players.size > 0 && !this.focusedPlayerId) {
                     this.chooseNewFocus();
