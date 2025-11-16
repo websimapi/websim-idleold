@@ -112,6 +112,7 @@ export class Player {
             inventory: this.inventory,
             state: this.state,
             actionTarget: this.actionTarget, // Save the action target
+            pendingHarvest: this.pendingHarvest,
             activeCommand: this.activeCommand,
             skills: this.skills,
         };
@@ -147,6 +148,7 @@ export class Player {
         this.username = state.username || this.username;
         this.color = state.color || this.color;
         this.inventory = state.inventory || { logs: [], leaves: [] };
+        this.pendingHarvest = state.pendingHarvest || [];
         this.skills = state.skills || { woodcutting: [], gathering: [] };
         this.activeCommand = state.activeCommand || null;
 
