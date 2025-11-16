@@ -1,5 +1,23 @@
 export const ENERGY_DURATION_MS = 3600 * 1000; // 1 hour (3600 seconds)
 
+const MAX_ENERGY_SLOTS = 12;
+// Block characters representing 0/8 to 7/8 fill. Index 0 is empty, Index 7 is nearly full/full.
+const PARTIAL_BLOCKS = [
+    ' ', // 0/8 (Space)
+    '▂', // 1/8
+    '▃', // 2/8
+    '▄', // 3/8
+    '▅', // 4/8
+    '▆', // 5/8
+    '▇', // 6/8
+    '█'  // 7/8 (Full)
+];
+
+const FILLED_BLOCK = '█'; // Full Block
+const EMPTY_BLOCK_VISUAL = '▒'; // Visual representation for empty slots
+const FILLED_COLOR = 'rgb(173, 216, 230)'; // Light Blue
+const EMPTY_COLOR_ALPHA = 'rgba(173, 216, 230, 0.4)'; // Semi-transparent Light Blue
+
 export class Player {
     constructor(id, username, color) {
         this.id = id;
@@ -21,11 +39,15 @@ export class Player {
         this.speed = 1; // tiles per second
         this.moveCooldown = 2 + Math.random() * 5; // time to wait before picking new target
         this.lastEnergyLogTime = 0; // Initialize log throttle
+        this.currentCellDrainRatio = 0; // 0 (full) to 1 (empty)
+        this.flashState = 0; // For subtle flashing effect
     }
 
     addEnergy() {
-        // Add current timestamp for a new energy cell
-        this.energyTimestamps.push(Date.now());
+        if (this.energyTimestamps.length < MAX_ENERGY_SLOTS) {
+            // Add current timestamp for a new energy cell
+            this.energyTimestamps.push(Date.now());
+        }
     }
 
     isPowered() {
@@ -79,9 +101,19 @@ export class Player {
             // 1. Energy Draining Logic
             const now = Date.now();
             const oldestTimestamp = this.energyTimestamps[0];
+            
+            // Calculate drain status
+            const timeElapsed = now - oldestTimestamp;
+            this.currentCellDrainRatio = Math.min(1, timeElapsed / ENERGY_DURATION_MS);
+            
             const expirationTime = oldestTimestamp + ENERGY_DURATION_MS;
             
             const remainingMS = expirationTime - now;
+
+            // Update flash state for visualization
+            // Use a quick oscillation based on time
+            // Reduced frequency (750) for a slower, smoother pulse effect
+            this.flashState = (Math.sin(now / 750) + 1) / 2; // Value between 0 and 1
 
             // Console log remaining time for the current draining energy cell (as requested)
             if (remainingMS > 0) {
@@ -103,6 +135,8 @@ export class Player {
                 
                 // If this was the last cell, stop movement logic execution for this frame
                 if (!this.isPowered()) {
+                    this.currentCellDrainRatio = 0; // Reset ratio if no power
+                    this.flashState = 0;
                     return; 
                 }
             }
@@ -153,18 +187,24 @@ export class Player {
         const screenX = (this.pixelX * tileSize + tileSize / 2) - cameraX;
         const screenY = (this.pixelY * tileSize + tileSize / 2) - cameraY;
 
+        ctx.save();
+        
         ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
         ctx.fill();
 
+        // Default player stroke
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
         ctx.stroke();
 
         // Draw Nametag Label
         // Use a minimum font size of 12px for readability, scaling up with tileSize
-        const fontSize = Math.max(12, tileSize * 0.6); 
+        const baseFontSize = Math.max(12, tileSize * 0.6); 
+        const fontSize = Math.max(10, baseFontSize * (2/3)); // Apply 2/3 scaling, ensuring a minimum size of 10px
         ctx.font = `${fontSize}px Arial, sans-serif`;
         
         // Setup for text rendering
@@ -176,9 +216,102 @@ export class Player {
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.lineWidth = 3; // Thicker stroke for visibility
 
-        const tagY = screenY - radius - 5; // Position slightly above the player circle
+        const tagY = screenY - radius - 18; // Position slightly above the player circle, moved up 10px (8 + 10 = 18)
         
+        // Draw Username
         ctx.strokeText(this.username, screenX, tagY);
         ctx.fillText(this.username, screenX, tagY);
+        
+        // Draw Energy Bar
+        if (this.isPowered()) {
+            this.drawEnergyBar(ctx, screenX, tagY, fontSize);
+        }
+        
+        ctx.restore();
+    }
+    
+    drawEnergyBar(ctx, screenX, usernameTagY, usernameFontSize) {
+        if (this.energyTimestamps.length === 0) return;
+
+        // Energy Bar Specific Font Setup
+        const barFontSize = usernameFontSize * 0.7; 
+        ctx.font = `${barFontSize}px monospace`; 
+        ctx.textAlign = 'center';
+        // Ensure the bar renders just below the username by using a top baseline
+        ctx.textBaseline = 'top';
+
+        // Determine Y position for the energy bar, hugging the username tag but not overlapping
+        const verticalOffset = 2; // small spacing to avoid clipping into the label
+        const barY = usernameTagY + verticalOffset;
+
+        // Measure the width of a single block character consistently
+        const blockWidth = ctx.measureText(FILLED_BLOCK).width;
+        const totalBarWidth = blockWidth * MAX_ENERGY_SLOTS;
+        const startX = screenX - totalBarWidth / 2;
+
+        const totalEnergyCells = this.energyTimestamps.length;
+        
+        // Calculate remaining ratio (1.0 = full, 0.0 = empty) for the draining cell (index 0)
+        const remainingRatio = 1 - this.currentCellDrainRatio;
+        
+        // Calculate the index for PARTIAL_BLOCKS array (0 to 7) based on 8 levels of granularity
+        const partialBlockIndex = Math.max(0, Math.min(PARTIAL_BLOCKS.length - 1, Math.floor(remainingRatio * PARTIAL_BLOCKS.length)));
+        
+        for (let i = 0; i < MAX_ENERGY_SLOTS; i++) {
+            let block = EMPTY_BLOCK_VISUAL;
+            let isDrainingCell = false;
+
+            if (i < totalEnergyCells) {
+                if (i === 0) {
+                    // This is the currently draining cell
+                    block = PARTIAL_BLOCKS[partialBlockIndex];
+                    isDrainingCell = true;
+                } else {
+                    // This is a full, reserved cell (index > 0)
+                    block = FILLED_BLOCK;
+                }
+            } 
+
+            // Calculate current block's center X position
+            const currentBlockCenterX = startX + (i * blockWidth) + (blockWidth / 2);
+
+            ctx.save(); 
+
+            // Set color based on fill status
+            if (i < totalEnergyCells) {
+                // Filled block or partial block (Light Blue)
+                ctx.fillStyle = FILLED_COLOR;
+            } else {
+                // Empty block (Semi-transparent Light Blue)
+                ctx.fillStyle = EMPTY_COLOR_ALPHA;
+            }
+
+            // Draw flashing outline around the draining cell (index 0)
+            if (isDrainingCell) {
+                // Use flashState from player update for subtle oscillation
+                const maxOutlineWidth = 1.5; 
+                const outlineWidth = 0.5 + this.flashState * maxOutlineWidth;
+                const alpha = 0.4 + this.flashState * 0.6; 
+
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.lineWidth = outlineWidth;
+                
+                // Define the bounding box for the block visually
+                const margin = 1; 
+                const rectX = currentBlockCenterX - blockWidth / 2 - margin;
+                
+                // With top baseline, Y is the top of the text box; make the outline 1px larger on top
+                const rectY = barY - margin - 1; 
+                const rectW = blockWidth + 2 * margin;
+                const rectH = barFontSize + 2 * margin + 1;
+                
+                ctx.strokeRect(rectX, rectY, rectW, rectH);
+            }
+
+            // Draw the block character
+            ctx.fillText(block, currentBlockCenterX, barY);
+            
+            ctx.restore(); 
+        }
     }
 }
