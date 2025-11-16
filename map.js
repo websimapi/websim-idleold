@@ -4,7 +4,6 @@ export class Map {
         this.height = height;
         this.tileSize = tileSize;
         this.grassTile = null;
-        this.pattern = null;
         this.viewportWidth = 0;
         this.viewportHeight = 0;
     }
@@ -23,29 +22,35 @@ export class Map {
             this.grassTile = new Image();
             this.grassTile.src = './grass_tile.png';
             this.grassTile.onload = () => {
-                // Create pattern after image is loaded
-                const tempCtx = document.createElement('canvas').getContext('2d');
-                this.pattern = tempCtx.createPattern(this.grassTile, 'repeat');
                 resolve();
             };
         });
     }
 
     render(ctx, cameraX, cameraY) {
-        if (!this.pattern) return;
+        if (!this.grassTile || !this.grassTile.complete) return;
 
         ctx.save();
         // Translate to camera position
         // This is a simple camera that just shows the top-left of the map
         ctx.translate(-cameraX, -cameraY);
 
-        ctx.fillStyle = this.pattern;
-        
         // Calculate the total pixel size of the map
         const mapPixelWidth = this.width * this.tileSize;
         const mapPixelHeight = this.height * this.tileSize;
 
-        ctx.fillRect(0, 0, mapPixelWidth, mapPixelHeight);
+        // Iterate and draw grass tiles for each grid spot
+        for (let i = 0; i < this.width; i++) {
+            for (let j = 0; j < this.height; j++) {
+                ctx.drawImage(
+                    this.grassTile,
+                    i * this.tileSize,
+                    j * this.tileSize,
+                    this.tileSize,
+                    this.tileSize
+                );
+            }
+        }
 
         // Draw grid lines
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Subtle grid lines
