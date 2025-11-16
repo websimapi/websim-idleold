@@ -1,12 +1,12 @@
 import { Player } from './player.js';
-import { Map } from './map.js';
+import { Map as GameMap } from './map.js';
 
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.players = new Map();
-        this.map = new Map(256, 256, 32);
+        this.map = new GameMap(256, 256, 32);
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
