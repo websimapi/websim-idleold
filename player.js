@@ -75,5 +75,24 @@ export class Player {
         ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // Draw Nametag Label
+        // Use a minimum font size of 12px for readability, scaling up with tileSize
+        const fontSize = Math.max(12, tileSize * 0.6); 
+        ctx.font = `${fontSize}px Arial, sans-serif`;
+        
+        // Setup for text rendering
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        
+        // Text color and stroke for visibility against any background
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.lineWidth = 3; // Thicker stroke for visibility
+
+        const tagY = screenY - radius - 5; // Position slightly above the player circle
+        
+        ctx.strokeText(this.username, screenX, tagY);
+        ctx.fillText(this.username, screenX, tagY);
     }
 }
