@@ -135,10 +135,11 @@ export function setChopTarget(player, gameMap, treeCoords) {
     }
     
     if(bestSpot) {
-       player.targetX = bestSpot.x;
-       player.targetY = bestSpot.y;
+       // Move to the edge of the tile, closer to the tree
+       player.targetX = bestSpot.x + (treeCoords.x - bestSpot.x) * 0.4;
+       player.targetY = bestSpot.y + (treeCoords.y - bestSpot.y) * 0.4;
        player.state = PLAYER_STATE.MOVING_TO_TREE;
-       console.log(`[${player.username}] Set target for tree at (${treeCoords.x}, ${treeCoords.y}). Moving to (${player.targetX}, ${player.targetY}).`);
+       console.log(`[${player.username}] Set target for tree at (${treeCoords.x}, ${treeCoords.y}). Moving to (${player.targetX.toFixed(2)}, ${player.targetY.toFixed(2)}).`);
     } else {
         console.log(`[${player.username}] Tree at (${treeCoords.x}, ${treeCoords.y}) is surrounded. Can't chop.`);
         player.state = PLAYER_STATE.IDLE;
@@ -146,7 +147,7 @@ export function setChopTarget(player, gameMap, treeCoords) {
 }
 
 export function updateAction(player, deltaTime, gameMap) {
-    const atMoveTarget = Math.round(player.pixelX) === player.targetX && Math.round(player.pixelY) === player.targetY;
+    const atMoveTarget = Math.sqrt((player.pixelX - player.targetX)**2 + (player.pixelY - player.targetY)**2) < 0.05;
     const atActionTarget = player.actionTarget && Math.round(player.pixelX) === player.actionTarget.x && Math.round(player.pixelY) === player.actionTarget.y;
 
     switch (player.state) {
