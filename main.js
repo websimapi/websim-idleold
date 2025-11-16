@@ -1,4 +1,4 @@
-import { initTwitch, getActiveChatters } from './twitch.js';
+import { initTwitch } from './twitch.js';
 import { Game } from './game.js';
 
 const connectContainer = document.getElementById('connect-container');
