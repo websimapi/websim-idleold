@@ -30,8 +30,8 @@ export function updateFollowPath(player, deltaTime, gameMap) {
 
     // Set the current target to the next waypoint in the path
     const nextWaypoint = player.path[0];
-    player.targetX = nextWaypoint.x;
-    player.targetY = nextWaypoint.y;
+    player.targetX = nextWaypoint.x + 0.5;
+    player.targetY = nextWaypoint.y + 0.5;
 
     // Move towards the waypoint
     updateMoveToTarget(player, deltaTime, gameMap);
@@ -169,8 +169,8 @@ export function pickNewTarget(player, gameMap) {
         
         if (!gameMap.isColliding(newX, newY)) {
             validTarget = true;
-            player.targetX = newX;
-            player.targetY = newY;
+            player.targetX = newX + 0.5;
+            player.targetY = newY + 0.5;
         }
         attempts++;
     }

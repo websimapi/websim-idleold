@@ -46,7 +46,7 @@ function checkAABBCollision(rect1, rect2) {
     );
 }
 
-function checkCircleRectCollision(circle, rect) {
+export function checkCircleRectCollision(circle, rect) {
     // Find the closest point on the rect to the circle's center
     const closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
     const closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));

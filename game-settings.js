@@ -21,6 +21,7 @@ export const DEFAULT_GAME_SETTINGS = {
     visuals: {
         show_target_indicator: true,
         show_hitboxes: false,
+        show_pathing_lines: false,
     }
 };
 

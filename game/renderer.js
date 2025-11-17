@@ -153,6 +153,43 @@ function renderHitboxes(ctx, players, map, camera, settings) {
     ctx.restore();
 }
 
+function renderPathingLines(ctx, players, camera, map, settings) {
+    if (!settings.visuals || !settings.visuals.show_pathing_lines) return;
+
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]); // Dashed lines for paths
+
+    const tileSize = map.tileSize;
+
+    for (const player of players.values()) {
+        if (!player.isPowered() || !player.path || player.path.length === 0) continue;
+
+        const pathColor = player.color || '#FFFFFF';
+        ctx.strokeStyle = pathColor;
+        ctx.globalAlpha = 0.8;
+
+        ctx.beginPath();
+
+        // Line from player's current center to the first waypoint
+        const playerScreenX = ((player.pixelX + player.offsetX) * tileSize) - camera.x;
+        const playerScreenY = ((player.pixelY + player.offsetY) * tileSize) - camera.y;
+        ctx.moveTo(playerScreenX, playerScreenY);
+
+        // Lines connecting waypoints
+        for (const waypoint of player.path) {
+            // Target the center of the tile
+            const waypointScreenX = (waypoint.x + 0.5) * tileSize - camera.x;
+            const waypointScreenY = (waypoint.y + 0.5) * tileSize - camera.y;
+            ctx.lineTo(waypointScreenX, waypointScreenY);
+        }
+
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
 export function renderGame(game) {
     const { ctx, canvas, camera, map, players, settings } = game;
 
@@ -174,4 +211,5 @@ export function renderGame(game) {
     renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, drawEndY, tileSize, camera);
 
     renderHitboxes(ctx, players, map, camera, settings);
+    renderPathingLines(ctx, players, camera, map, settings);
 }

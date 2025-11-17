@@ -6,7 +6,7 @@ import { beginHarvestingBushes, beginHarvestingLogs, finishHarvestingBushes, fin
 import { updateFollow } from './following.js';
 import { TILE_TYPE } from '../map-tile-types.js';
 import { findPath } from '../pathfinding.js';
-import { getPlayerHitbox } from '../game/physics.js';
+import { getPlayerHitbox, getTreeTrunkHitbox, checkCircleRectCollision } from '../game/physics.js';
 
 function treeHasBeenChopped(player, gameMap, allPlayers) {
     console.log(`[${player.username}] Joined in chopping a tree that was just cut. Proceeding to gather.`);
@@ -76,41 +76,32 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             updateFollowPath(player, deltaTime, gameMap);
             
-            // Check if movement has stopped. This happens if path is empty OR if physics prevents movement.
-            const movementStopped = player.path.length === 0 || (player.pixelX === player.prevPixelX && player.pixelY === player.prevPixelY);
+            // Check if player is now touching the tree trunk's interaction area.
+            const playerHitbox = getPlayerHitbox(player);
+            const treeTrunkHitbox = getTreeTrunkHitbox(player.actionTarget.x, player.actionTarget.y);
+            
+            // Inflate the tree's hitbox slightly for interaction check.
+            // This ensures that when collision stops the player, they are inside this interaction box.
+            const interactionPadding = 0.05; // A small padding in grid units
+            const interactionHitbox = {
+                x: treeTrunkHitbox.x - interactionPadding,
+                y: treeTrunkHitbox.y - interactionPadding,
+                width: treeTrunkHitbox.width + interactionPadding * 2,
+                height: treeTrunkHitbox.height + interactionPadding * 2
+            };
 
-            if (movementStopped) {
-                 // Check if we are now touching the tree trunk
-                const treeHitbox = {
-                    x: player.actionTarget.x,
-                    y: player.actionTarget.y,
-                    width: 1,
-                    height: 1
-                };
-                const playerHitbox = getPlayerHitbox(player);
-                // Inflate tree hitbox slightly for easier interaction.
-                // The size is increased to ensure a player on an adjacent tile can interact.
-                const interactionHitbox = {
-                    x: treeHitbox.x - 0.5,
-                    y: treeHitbox.y - 0.5,
-                    width: treeHitbox.width + 1,
-                    height: treeHitbox.height + 1,
-                };
+            const isTouching = checkCircleRectCollision(playerHitbox, interactionHitbox);
 
-                // Use a simplified distance check for circle-to-tile interaction
-                const dx = playerHitbox.x - (treeHitbox.x + 0.5);
-                const dy = playerHitbox.y - (treeHitbox.y + 0.5);
-                const distanceSq = dx * dx + dy * dy;
-                const interactionRadius = playerHitbox.radius + 0.707; // player radius + half a tile's diagonal
-                
-                const isTouching = distanceSq < (interactionRadius * interactionRadius);
+            if (isTouching) {
+                beginChopping(player, gameMap, game);
+                return; // State transitioned
+            }
 
-                if (isTouching) {
-                    beginChopping(player, gameMap, game);
-                } else {
-                    console.warn(`[${player.username}] Arrived near tree but not touching. Finding new tree.`);
-                    startChoppingCycle(player, gameMap);
-                }
+            // Fallback: If movement has completely stopped (due to path end or being stuck) and we're not touching, find a new tree.
+            const movementStopped = player.path.length === 0 && (player.pixelX === player.prevPixelX && player.pixelY === player.prevPixelY);
+            if(movementStopped) {
+                console.warn(`[${player.username}] Arrived near tree but not touching. Finding new tree.`);
+                startChoppingCycle(player, gameMap);
             }
             break;
         case PLAYER_STATE.MOVING_TO_LOGS:
