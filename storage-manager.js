@@ -97,6 +97,41 @@ export async function deleteWorld(channel, worldName) {
     console.log(`[StorageManager] Deleted world ${worldName} from IndexedDB.`);
 }
 
+export async function renameWorld(channel, oldWorldName, newWorldName) {
+    // IndexedDB world data
+    const oldWorldKey = `${channel}/${oldWorldName}`;
+    const newWorldKey = `${channel}/${newWorldName}`;
+
+    const worldData = await idb.get('worlds', oldWorldKey);
+
+    if (worldData) { // It might be a new world that hasn't been saved yet
+        await idb.set('worlds', newWorldKey, worldData);
+        await idb.del('worlds', oldWorldKey);
+    }
+
+    // localStorage settings
+    const oldSettingsKey = `twitch_game_settings_${channel}_${oldWorldName}`;
+    const newSettingsKey = `twitch_game_settings_${channel}_${newWorldName}`;
+    const settingsData = localStorage.getItem(oldSettingsKey);
+    if (settingsData) {
+        localStorage.setItem(newSettingsKey, settingsData);
+        localStorage.removeItem(oldSettingsKey);
+    }
+
+    // localStorage hosts
+    const oldHostsKey = `twitch_game_hosts_${channel}_${oldWorldName}`;
+    const newHostsKey = `twitch_game_hosts_${channel}_${newWorldName}`;
+    const hostsData = localStorage.getItem(oldHostsKey);
+    if (hostsData) {
+        localStorage.setItem(newHostsKey, hostsData);
+        localStorage.removeItem(oldHostsKey);
+    }
+
+    console.log(`[StorageManager] Renamed world from '${oldWorldName}' to '${newWorldName}'.`);
+    return true;
+}
+
+
 export async function exportWorldData(channel, worldName, useVerbose) {
     const worldKey = `${channel}/${worldName}`;
     const worldState = await idb.get('worlds', worldKey);

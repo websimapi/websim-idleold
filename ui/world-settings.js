@@ -144,42 +144,62 @@ export function showWorldSettings(channel, worldName) {
     }
     updateStorageInfo();
 
-    function handleRename() {
+    async function handleRename() {
         const newWorldName = worldNameInputEl.value.trim();
         if (newWorldName && newWorldName !== currentWorldName) {
-            const existingWorlds = findWorldsForChannel(channel);
-            if (existingWorlds.includes(newWorldName)) {
-                alert(`A world named \\\"${newWorldName}\\\" already exists. Please choose a different name.`);
+            if (newWorldName.toLowerCase() === 'default') {
+                alert("You cannot name a world 'default'. Please choose a different name.");
                 worldNameInputEl.value = currentWorldName; // Revert
                 return false;
             }
 
-            // Renaming logic needs to be updated for IndexedDB
-            console.warn("World renaming with IndexedDB not fully implemented yet.");
-            // For now, prevent renaming to avoid data loss.
-             alert("Renaming worlds is temporarily disabled during storage transition.");
-             worldNameInputEl.value = currentWorldName;
-             return false;
+            const existingWorlds = await findWorldsForChannel(channel);
+            if (existingWorlds.includes(newWorldName)) {
+                alert(`A world named "${newWorldName}" already exists. Please choose a different name.`);
+                worldNameInputEl.value = currentWorldName; // Revert
+                return false;
+            }
+
+            const success = await StorageManager.renameWorld(channel, currentWorldName, newWorldName);
+            if (success) {
+                console.log(`World renamed from ${currentWorldName} to ${newWorldName}`);
+                // Update internal state
+                const oldWorldName = currentWorldName;
+                currentWorldName = newWorldName;
+
+                // Update the world list display
+                await populateWorldList(channel);
+
+                // Re-select the newly named world
+                setTimeout(() => {
+                    const worldItems = document.querySelectorAll('.world-item h3');
+                    for (const h3 of worldItems) {
+                        if (h3.textContent === currentWorldName) {
+                            const parent = h3.parentElement;
+                            document.querySelectorAll('.world-item.selected').forEach(el => el.classList.remove('selected'));
+                            parent.classList.add('selected');
+                            break;
+                        }
+                    }
+                }, 100);
+                
+                return true;
+            } else {
+                alert("An error occurred while renaming the world.");
+                worldNameInputEl.value = currentWorldName; // Revert on failure
+                return false;
+            }
         }
         return false;
     }
 
-    worldNameInputEl.addEventListener('blur', () => {
-        if (handleRename()) {
-            // After a successful rename, we need to \"re-render\" the settings
-            // to ensure all event handlers and variables are using the new world name.
-            showWorldSettings(channel, currentWorldName);
-            // Re-select the item in the list after re-render
-            setTimeout(() => {
-                const worldItems = document.querySelectorAll('.world-item');
-                const newWorldEl = Array.from(worldItems).find(el => {
-                    const h3 = el.querySelector('h3');
-                    return h3 && h3.textContent === currentWorldName;
-                });
-                if (newWorldEl) {
-                    newWorldEl.classList.add('selected');
-                }
-            }, 0);
+    worldNameInputEl.addEventListener('blur', async () => {
+        await handleRename();
+    });
+
+    worldNameInputEl.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+            worldNameInputEl.blur(); // Trigger blur to save
         }
     });
 
@@ -228,8 +248,8 @@ export function showWorldSettings(channel, worldName) {
         }
     });
 
-    playBtn.addEventListener('click', () => {
-        handleRename(); // Save name change on play, if any
+    playBtn.addEventListener('click', async () => {
+        await handleRename(); // Save name change on play, if any
         const currentSettings = loadSettings(channel, currentWorldName);
         showGame(channel, currentWorldName, hosts, currentSettings);
     });
