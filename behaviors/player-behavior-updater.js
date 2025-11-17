@@ -82,27 +82,28 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             if (movementStopped) {
                  // Check if we are now touching the tree trunk
                 const treeHitbox = {
-                    x: player.actionTarget.x + 0.4375,
-                    y: player.actionTarget.y + 0.5,
-                    width: 0.125,
-                    height: 0.5
+                    x: player.actionTarget.x,
+                    y: player.actionTarget.y,
+                    width: 1,
+                    height: 1
                 };
                 const playerHitbox = getPlayerHitbox(player);
                 // Inflate tree hitbox slightly for easier interaction.
                 // The size is increased to ensure a player on an adjacent tile can interact.
                 const interactionHitbox = {
-                    x: treeHitbox.x - 0.45,
-                    y: treeHitbox.y - 0.45,
-                    width: treeHitbox.width + 0.9,
-                    height: treeHitbox.height + 0.9,
+                    x: treeHitbox.x - 0.5,
+                    y: treeHitbox.y - 0.5,
+                    width: treeHitbox.width + 1,
+                    height: treeHitbox.height + 1,
                 };
 
-                const isTouching = (
-                    playerHitbox.x < interactionHitbox.x + interactionHitbox.width &&
-                    playerHitbox.x + playerHitbox.width > interactionHitbox.x &&
-                    playerHitbox.y < interactionHitbox.y + interactionHitbox.height &&
-                    playerHitbox.y + playerHitbox.height > interactionHitbox.y
-                );
+                // Use a simplified distance check for circle-to-tile interaction
+                const dx = playerHitbox.x - (treeHitbox.x + 0.5);
+                const dy = playerHitbox.y - (treeHitbox.y + 0.5);
+                const distanceSq = dx * dx + dy * dy;
+                const interactionRadius = playerHitbox.radius + 0.707; // player radius + half a tile's diagonal
+                
+                const isTouching = distanceSq < (interactionRadius * interactionRadius);
 
                 if (isTouching) {
                     beginChopping(player, gameMap, game);

@@ -2,26 +2,24 @@ import { TILE_TYPE } from '../map-tile-types.js';
 
 // --- Hitbox Definitions (in tile units) ---
 
-// Player hitbox: A rectangle at the player's feet.
-// Centered horizontally, positioned at the bottom of the player's logical space.
-const PLAYER_HITBOX_WIDTH = 0.6;
-const PLAYER_HITBOX_HEIGHT = 0.3;
+// Player hitbox: A circle.
+const PLAYER_HITBOX_RADIUS = 1 / 2.5; // ~0.4 tile units, from player-renderer.js
 
-// Tree trunk hitbox: As specified, bottom 50% height, centered 12.5% width.
-const TREE_TRUNK_HITBOX_WIDTH = 0.125;
+// Tree trunk hitbox: As specified, bottom 50% height, centered 25% width.
+const TREE_TRUNK_HITBOX_WIDTH = 0.25;
 const TREE_TRUNK_HITBOX_HEIGHT = 0.5;
-const TREE_TRUNK_OFFSET_X = (1 - TREE_TRUNK_HITBOX_WIDTH) / 2; // ~0.4375
+const TREE_TRUNK_OFFSET_X = (1 - TREE_TRUNK_HITBOX_WIDTH) / 2; // ~0.375
 
 export function getPlayerHitbox(player) {
     return {
-        x: player.pixelX - PLAYER_HITBOX_WIDTH / 2,
-        y: player.pixelY - PLAYER_HITBOX_HEIGHT / 2, // Centered vertically on pixelY for now
-        width: PLAYER_HITBOX_WIDTH,
-        height: PLAYER_HITBOX_HEIGHT
+        // circle
+        x: player.pixelX + player.offsetX,
+        y: player.pixelY + player.offsetY,
+        radius: PLAYER_HITBOX_RADIUS
     };
 }
 
-function getTreeTrunkHitbox(tileX, tileY) {
+export function getTreeTrunkHitbox(tileX, tileY) {
     return {
         x: tileX + TREE_TRUNK_OFFSET_X,
         y: tileY + (1 - TREE_TRUNK_HITBOX_HEIGHT), // Bottom half of the tile
@@ -48,24 +46,55 @@ function checkAABBCollision(rect1, rect2) {
     );
 }
 
+function checkCircleRectCollision(circle, rect) {
+    // Find the closest point on the rect to the circle's center
+    const closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+    const closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+
+    // Calculate the distance between the circle's center and this closest point
+    const dx = circle.x - closestX;
+    const dy = circle.y - closestY;
+    const distanceSquared = (dx * dx) + (dy * dy);
+
+    // If the distance is less than the circle's radius squared, they are colliding
+    return distanceSquared < (circle.radius * circle.radius);
+}
+
 /**
  * Checks a given rectangular hitbox against all solid objects in the world.
  * @param {object} rect - The hitbox to check { x, y, width, height }.
  * @param {GameMap} gameMap - The game map instance.
  * @returns {boolean} - True if a collision is detected.
  */
-export function checkWorldCollision(rect, gameMap) {
+export function checkWorldCollision(hitbox, gameMap) {
+    const isCircle = hitbox.radius !== undefined;
+
     // Check collision with map boundaries
-    if (rect.x < 0 || rect.x + rect.width > gameMap.width ||
-        rect.y < 0 || rect.y + rect.height > gameMap.height) {
-        return true;
+    if (isCircle) {
+        if (hitbox.x - hitbox.radius < 0 || hitbox.x + hitbox.radius > gameMap.width ||
+            hitbox.y - hitbox.radius < 0 || hitbox.y + hitbox.radius > gameMap.height) {
+            return true;
+        }
+    } else { // is rect
+        if (hitbox.x < 0 || hitbox.x + hitbox.width > gameMap.width ||
+            hitbox.y < 0 || hitbox.y + hitbox.height > gameMap.height) {
+            return true;
+        }
     }
 
     // Determine the grid range to check for potential colliders
-    const startX = Math.floor(rect.x);
-    const endX = Math.ceil(rect.x + rect.width);
-    const startY = Math.floor(rect.y);
-    const endY = Math.ceil(rect.y + rect.height);
+    const rectForRangeCheck = isCircle ? {
+        x: hitbox.x - hitbox.radius,
+        y: hitbox.y - hitbox.radius,
+        width: hitbox.radius * 2,
+        height: hitbox.radius * 2,
+    } : hitbox;
+
+
+    const startX = Math.floor(rectForRangeCheck.x);
+    const endX = Math.ceil(rectForRangeCheck.x + rectForRangeCheck.width);
+    const startY = Math.floor(rectForRangeCheck.y);
+    const endY = Math.ceil(rectForRangeCheck.y + rectForRangeCheck.height);
 
     // Check against trees in the vicinity
     for (let j = startY; j < endY; j++) {
@@ -76,8 +105,14 @@ export function checkWorldCollision(rect, gameMap) {
 
             if (gameMap.grid[j][i] === TILE_TYPE.TREE) {
                 const treeHitbox = getTreeTrunkHitbox(i, j);
-                if (checkAABBCollision(rect, treeHitbox)) {
-                    return true; // Collision detected
+                if (isCircle) {
+                    if (checkCircleRectCollision(hitbox, treeHitbox)) {
+                        return true;
+                    }
+                } else {
+                    if (checkAABBCollision(hitbox, treeHitbox)) {
+                        return true; // Collision detected
+                    }
                 }
             }
         }

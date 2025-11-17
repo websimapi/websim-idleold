@@ -1,5 +1,7 @@
 import { PLAYER_STATE } from '../player-state.js';
 import { AudioManager } from '../audio-manager.js';
+import { getPlayerHitbox, getTreeTrunkHitbox } from '../game/physics.js';
+import { TILE_TYPE } from '../map-tile-types.js';
 
 function getVisibleTileRange(camera, canvas, map) {
     const ts = map.tileSize;
@@ -109,6 +111,48 @@ function renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, draw
     }
 }
 
+function renderHitboxes(ctx, players, map, camera, settings) {
+    if (!settings.visuals || !settings.visuals.show_hitboxes) return;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)'; // Red outlines
+    ctx.lineWidth = 1;
+
+    const tileSize = map.tileSize;
+
+    // Draw player hitboxes
+    for (const player of players.values()) {
+        if (!player.isPowered()) continue;
+
+        const hitbox = getPlayerHitbox(player);
+        const screenX = hitbox.x * tileSize - camera.x;
+        const screenY = hitbox.y * tileSize - camera.y;
+        const screenRadius = hitbox.radius * tileSize;
+
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, screenRadius, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Draw tree trunk hitboxes for visible trees
+    const { drawStartX, drawEndX, drawStartY, drawEndY } = getVisibleTileRange(camera, ctx.canvas, map);
+    for (let j = drawStartY; j < drawEndY; j++) {
+        for (let i = drawStartX; i < drawEndX; i++) {
+            if (map.grid[j] && map.grid[j][i] === TILE_TYPE.TREE) {
+                const hitbox = getTreeTrunkHitbox(i, j);
+                const screenX = hitbox.x * tileSize - camera.x;
+                const screenY = hitbox.y * tileSize - camera.y;
+                const screenWidth = hitbox.width * tileSize;
+                const screenHeight = hitbox.height * tileSize;
+                
+                ctx.strokeRect(screenX, screenY, screenWidth, screenHeight);
+            }
+        }
+    }
+
+    ctx.restore();
+}
+
 export function renderGame(game) {
     const { ctx, canvas, camera, map, players, settings } = game;
 
@@ -128,4 +172,6 @@ export function renderGame(game) {
     renderTargetHighlights(ctx, players, camera, tileSize, settings);
 
     renderYSorted(ctx, players, map, drawStartX, drawEndX, drawStartY, drawEndY, tileSize, camera);
+
+    renderHitboxes(ctx, players, map, camera, settings);
 }

@@ -87,6 +87,10 @@ export function showWorldSettings(channel, worldName) {
                         <input type="checkbox" id="show_target_indicator" data-path="visuals.show_target_indicator" ${settings.visuals && settings.visuals.show_target_indicator ? 'checked' : ''}>
                         <label for="show_target_indicator">Show Target Tile Indicator</label>
                     </div>
+                    <div class="setting-item">
+                        <input type="checkbox" id="show_hitboxes" data-path="visuals.show_hitboxes" ${settings.visuals && settings.visuals.show_hitboxes ? 'checked' : ''}>
+                        <label for="show_hitboxes">Show Hitbox Outlines</label>
+                    </div>
                 </div>
             </div>
             <div class="settings-column">

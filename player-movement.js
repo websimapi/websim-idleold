@@ -73,7 +73,7 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         const originalHitbox = getPlayerHitbox(player);
 
         // Check X-axis movement
-        let hitboxX = { ...originalHitbox, x: proposedX - originalHitbox.width / 2 };
+        let hitboxX = { ...originalHitbox, x: proposedX + player.offsetX };
         if (!checkWorldCollision(hitboxX, gameMap)) {
             player.pixelX = proposedX;
         }
@@ -81,7 +81,7 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         // Check Y-axis movement
         // We need to re-evaluate the hitbox's Y based on the (potentially updated) player X
         const currentHitbox = getPlayerHitbox(player);
-        let hitboxY = { ...currentHitbox, y: proposedY - currentHitbox.height / 2 };
+        let hitboxY = { ...currentHitbox, y: proposedY + player.offsetY };
         if (!checkWorldCollision(hitboxY, gameMap)) {
             player.pixelY = proposedY;
         }
