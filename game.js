@@ -32,6 +32,7 @@ export class Game {
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
+        window.addEventListener('keydown', (e) => this.handleKeyPress(e));
         
         // Setup periodic save
         this.saveInterval = setInterval(() => {
@@ -49,6 +50,39 @@ export class Game {
         this.map.setTileSize(fixedTileSize);
 
         this.map.setViewport(this.canvas.width, this.canvas.height);
+    }
+
+    handleKeyPress(e) {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            this.switchToNextPlayerFocus();
+        }
+    }
+
+    switchToNextPlayerFocus() {
+        const activePlayers = Array.from(this.players.values()).filter(p => p.isPowered());
+        
+        if (activePlayers.length < 2) {
+            console.log("Not enough active players to switch focus.");
+            return;
+        }
+
+        // Sort by username to ensure a consistent order
+        activePlayers.sort((a, b) => a.username.localeCompare(b.username));
+
+        let currentIndex = -1;
+        if (this.focusedPlayerId) {
+            currentIndex = activePlayers.findIndex(p => p.id === this.focusedPlayerId);
+        }
+
+        const nextIndex = (currentIndex + 1) % activePlayers.length;
+        const nextPlayer = activePlayers[nextIndex];
+
+        if (nextPlayer) {
+            this.focusedPlayerId = nextPlayer.id;
+            this.focusTimer = this.FOCUS_DURATION; // Reset the auto-switch timer
+            console.log(`Camera focus switched to: ${nextPlayer.username}`);
+        }
     }
 
     savePlayers() {
