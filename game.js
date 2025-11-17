@@ -8,15 +8,19 @@ import { Camera } from './game/camera.js';
 import * as Persistence from './game/persistence.js';
 import { finishChopping } from './behaviors/chopping.js';
 import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './behaviors/index.js';
+import { DEFAULT_GAME_SETTINGS } from './game-settings.js';
+import { setEnergyCooldown } from './twitch.js';
 
 export class Game {
-    constructor(canvas, channel, worldName = 'default', hosts = []) {
+    constructor(canvas, channel, worldName = 'default', hosts = [], settings = DEFAULT_GAME_SETTINGS) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.channel = channel;
         this.worldName = worldName;
         this.hosts = new Set(hosts.map(h => h.toLowerCase()));
+        this.settings = settings;
         console.log("Game started with hosts:", this.hosts);
+        console.log("Game started with settings:", this.settings);
 
         const { playersStorageKey, mapStorageKey } = Persistence.getStorageKeys(this.channel, this.worldName);
         this.playersStorageKey = playersStorageKey;
@@ -27,8 +31,10 @@ export class Game {
         this.camera = new Camera(this.canvas, this.map, this.players);
         this.activeChoppingTargets = new Map();
 
+        setEnergyCooldown(this.settings.energy.chat_cooldown_seconds);
+
         Persistence.loadMap(this.map, this.mapStorageKey);
-        Persistence.loadPlayers(this.players, this.playersStorageKey);
+        Persistence.loadPlayers(this.players, this.playersStorageKey, this.settings);
 
         // Validate player states after loading everything
         for (const player of this.players.values()) {
@@ -64,7 +70,7 @@ export class Game {
     }
 
     updateActiveChopping(deltaTime) {
-        const CHOP_WORK = 11000; // ms
+        const CHOP_WORK = this.settings.woodcutting.tree_chop_work;
         const finishedTargets = [];
     
         for (const [targetId, chopData] of this.activeChoppingTargets.entries()) {
@@ -221,7 +227,7 @@ export class Game {
 
         if (!player) {
             // Truly new player (not in persistence or current map)
-            player = new Player(chatter.id, chatter.username, chatter.color);
+            player = new Player(chatter.id, chatter.username, chatter.color, this.settings);
             this.players.set(chatter.id, player);
             
             // Ensure player is positioned correctly on the map, avoiding obstacles
@@ -241,7 +247,7 @@ export class Game {
         }
 
         player.addEnergy();
-        console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energyTimestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
+        console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energy.timestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
     }
 
     start() {

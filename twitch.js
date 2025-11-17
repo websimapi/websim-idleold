@@ -1,7 +1,12 @@
 import tmi from 'tmi.js';
 
-const ENERGY_COOLDOWN = 10 * 60 * 1000; // 10 minutes in milliseconds
+let ENERGY_COOLDOWN = 10 * 60 * 1000; // 10 minutes in milliseconds. To be updated by game instance.
 const recentChatters = new Map();
+
+export function setEnergyCooldown(cooldownSeconds) {
+    ENERGY_COOLDOWN = cooldownSeconds * 1000;
+    console.log(`Twitch energy cooldown set to ${cooldownSeconds} seconds.`);
+}
 
 export function initTwitch(channel, onChatter, onCommand) {
     const client = new tmi.Client({
@@ -42,7 +47,9 @@ export function initTwitch(channel, onChatter, onCommand) {
                 lastMessageTimestamp: now,
             };
             recentChatters.set(userId, chatterData);
-            onChatter(chatterData);
+            if (userId) { // Double-check userId before calling onChatter
+                onChatter(chatterData);
+            }
         }
 
         // Handle commands on every message
