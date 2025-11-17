@@ -50,7 +50,7 @@ export function updateFollowPath(player, deltaTime, gameMap) {
     }
 }
 
-export function updateMoveToTarget(player, deltaTime, gameMap) {
+export function updateMoveToTarget(player, deltaTime, gameMap, ignorePixelCollision = false) {
     const dx = player.targetX - player.pixelX;
     const dy = player.targetY - player.pixelY;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -64,7 +64,7 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         const nextPixelX = player.pixelX + moveX;
         const nextPixelY = player.pixelY + moveY;
 
-        if (!gameMap.isPixelColliding(nextPixelX, nextPixelY)) {
+        if (ignorePixelCollision || !gameMap.isPixelColliding(nextPixelX, nextPixelY)) {
             player.pixelX = nextPixelX;
             player.pixelY = nextPixelY;
         } else {

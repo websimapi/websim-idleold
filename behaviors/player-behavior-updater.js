@@ -75,8 +75,22 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             updateFollowPath(player, deltaTime, gameMap);
             if (atMoveTarget) {
-                // The player has reached the adjacent tile. Start chopping.
-                beginChopping(player, gameMap, game);
+                // The player has reached the adjacent tile. Now, move into the tree tile.
+                const targetPixelX = player.actionTarget.x + 0.5;
+                const targetPixelY = player.actionTarget.y + 0.6 - (player.speed * 0.1); // Target just above collision
+                
+                player.targetX = targetPixelX;
+                player.targetY = targetPixelY;
+
+                const dx = player.targetX - player.pixelX;
+                const dy = player.targetY - player.pixelY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > 0.05) { // If not already close
+                    updateMoveToTarget(player, deltaTime, gameMap, true);
+                } else { // Close enough, start chopping
+                     beginChopping(player, gameMap, game);
+                }
             }
             break;
         case PLAYER_STATE.MOVING_TO_LOGS:
