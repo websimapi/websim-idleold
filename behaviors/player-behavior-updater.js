@@ -75,31 +75,8 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             updateFollowPath(player, deltaTime, gameMap);
             if (atMoveTarget) {
-                // To make chopping feel right, we do a final small move towards the tree itself.
-                const finalTargetX = player.actionTarget.x;
-                const finalTargetY = player.actionTarget.y;
-                const currentSpotX = Math.round(player.pixelX);
-                const currentSpotY = Math.round(player.pixelY);
-
-                // If player is directly below the tree, don't do the final adjustment
-                // to avoid colliding with the tree trunk hitbox.
-                const isDirectlyBelow = currentSpotX === finalTargetX && currentSpotY === finalTargetY + 1;
-
-                if (isDirectlyBelow) {
-                    beginChopping(player, gameMap, game);
-                    return;
-                }
-
-                player.targetX = currentSpotX + (finalTargetX - currentSpotX) * 0.4;
-                player.targetY = currentSpotY + (finalTargetY - currentSpotY) * 0.4;
-
-                const distToFinalAdjust = Math.sqrt((player.pixelX - player.targetX)**2 + (player.pixelY - player.targetY)**2);
-
-                if (distToFinalAdjust > 0.05) {
-                    updateMoveToTarget(player, deltaTime, gameMap);
-                } else {
-                     beginChopping(player, gameMap, game);
-                }
+                // The player has reached the adjacent tile. Start chopping.
+                beginChopping(player, gameMap, game);
             }
             break;
         case PLAYER_STATE.MOVING_TO_LOGS:
