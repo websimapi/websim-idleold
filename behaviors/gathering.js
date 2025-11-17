@@ -60,6 +60,7 @@ export function startGatheringCycle(player, gameMap) {
 export function beginHarvestingLogs(player) {
     player.state = PLAYER_STATE.HARVESTING_LOGS;
     player.actionTimer = 6;
+    player.actionTotalTime = 6;
     console.log(`[${player.username}] Began harvesting logs. Timestamp: ${Date.now()}`);
 }
 
@@ -107,7 +108,9 @@ export function harvestNextBush(player, gameMap) {
 
 export function beginHarvestingBushes(player) {
     player.state = PLAYER_STATE.HARVESTING_BUSHES;
-    player.actionTimer = 2 + Math.random();
+    const duration = 2 + Math.random();
+    player.actionTimer = duration;
+    player.actionTotalTime = duration;
     console.log(`[${player.username}] Began harvesting bushes. Timestamp: ${Date.now()}`);
 }
 

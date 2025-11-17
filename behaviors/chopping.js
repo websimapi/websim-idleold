@@ -75,6 +75,7 @@ export function startChoppingCycle(player, gameMap) {
 export function beginChopping(player) {
     player.state = PLAYER_STATE.CHOPPING;
     player.actionTimer = 11; // 11 seconds to chop
+    player.actionTotalTime = 11;
     console.log(`[${player.username}] Began chopping tree at (${player.actionTarget.x}, ${player.actionTarget.y}). Timestamp: ${Date.now()}`);
 }
 

@@ -40,6 +40,7 @@ export class Player {
         this.state = PLAYER_STATE.IDLE;
         this.actionTarget = null; // {x, y} of the tree, logs, etc.
         this.actionTimer = 0;
+        this.actionTotalTime = 0;
         this.inventory = { logs: [], leaves: [] };
         this.pendingHarvest = []; // {x, y, type} for bushes
         this.activeCommand = null;
