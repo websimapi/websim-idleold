@@ -50,30 +50,40 @@ export function updateFollowPath(player, deltaTime, gameMap) {
     }
 }
 
-export function updateMoveToTarget(player, deltaTime, gameMap, ignorePixelCollision = false) {
+import { getPlayerHitbox, checkWorldCollision } from './game/physics.js';
+
+export function updateMoveToTarget(player, deltaTime, gameMap) {
     const dx = player.targetX - player.pixelX;
     const dy = player.targetY - player.pixelY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist > 0.01) {
-        const moveAmount = player.speed * deltaTime;
+        const moveAmount = Math.min(player.speed * deltaTime, dist);
         
         const moveX = (dx / dist) * moveAmount;
         const moveY = (dy / dist) * moveAmount;
 
-        const nextPixelX = player.pixelX + moveX;
-        const nextPixelY = player.pixelY + moveY;
+        let proposedX = player.pixelX + moveX;
+        let proposedY = player.pixelY + moveY;
 
-        if (ignorePixelCollision || !gameMap.isPixelColliding(nextPixelX, nextPixelY)) {
-            player.pixelX = nextPixelX;
-            player.pixelY = nextPixelY;
-        } else {
-            // If full move is blocked, try moving only on one axis
-            if (!gameMap.isPixelColliding(nextPixelX, player.pixelY)) {
-                player.pixelX = nextPixelX;
-            } else if (!gameMap.isPixelColliding(player.pixelX, nextPixelY)) {
-                player.pixelY = nextPixelY;
-            }
+        // Store current position to detect if movement is blocked
+        player.prevPixelX = player.pixelX;
+        player.prevPixelY = player.pixelY;
+        
+        const originalHitbox = getPlayerHitbox(player);
+
+        // Check X-axis movement
+        let hitboxX = { ...originalHitbox, x: proposedX - originalHitbox.width / 2 };
+        if (!checkWorldCollision(hitboxX, gameMap)) {
+            player.pixelX = proposedX;
+        }
+
+        // Check Y-axis movement
+        // We need to re-evaluate the hitbox's Y based on the (potentially updated) player X
+        const currentHitbox = getPlayerHitbox(player);
+        let hitboxY = { ...currentHitbox, y: proposedY - currentHitbox.height / 2 };
+        if (!checkWorldCollision(hitboxY, gameMap)) {
+            player.pixelY = proposedY;
         }
     } else {
         player.pixelX = player.targetX;

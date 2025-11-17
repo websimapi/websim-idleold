@@ -24,10 +24,6 @@ export function findAndMoveToTree(player, gameMap) {
 
     for (let i = 0; i < allTrees.length && i < MAX_TREES_TO_CHECK; i++) {
         const treeCoords = allTrees[i];
-        
-        // The destination is now the tree tile itself, not an adjacent one.
-        // Pathfinding will find a path to the closest reachable point next to the tree tile,
-        // and the final step into the tree tile is handled by the movement logic.
         const startX = Math.round(player.pixelX);
         const startY = Math.round(player.pixelY);
         const path = findPath(startX, startY, treeCoords.x, treeCoords.y, gameMap);
@@ -35,6 +31,9 @@ export function findAndMoveToTree(player, gameMap) {
         if(path) {
            player.actionTarget = treeCoords;
            player.path = path;
+           // The final destination is the tree tile itself. The physics engine will stop the player.
+           player.targetX = treeCoords.x;
+           player.targetY = treeCoords.y;
            player.state = PLAYER_STATE.MOVING_TO_TREE;
            console.log(`[${player.username}] Found pathable tree at (${treeCoords.x}, ${treeCoords.y}). Moving to chop.`);
            pathFound = true;

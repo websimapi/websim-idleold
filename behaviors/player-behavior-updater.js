@@ -1,11 +1,12 @@
 import { PLAYER_STATE } from '../player-state.js';
 import { AudioManager } from '../audio-manager.js';
 import { updateWander, updateMoveToTarget, updateFollowPath } from '../player-movement.js';
-import { beginChopping, finishChopping, startChoppingCycle } from './chopping.js';
+import { beginChopping, finishChopping, startChoppingCycle, findAndMoveToTree } from './chopping.js';
 import { beginHarvestingBushes, beginHarvestingLogs, finishHarvestingBushes, finishHarvestingLogs, harvestNextBush, startGatheringCycle } from './gathering.js';
 import { updateFollow } from './following.js';
 import { TILE_TYPE } from '../map-tile-types.js';
 import { findPath } from '../pathfinding.js';
+import { getPlayerHitbox } from '../game/physics.js';
 
 function treeHasBeenChopped(player, gameMap, allPlayers) {
     console.log(`[${player.username}] Joined in chopping a tree that was just cut. Proceeding to gather.`);
@@ -74,22 +75,40 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
                 return;
             }
             updateFollowPath(player, deltaTime, gameMap);
-            if (atMoveTarget) {
-                // The player has reached the adjacent tile. Now, move into the tree tile.
-                const targetPixelX = player.actionTarget.x + 0.5;
-                const targetPixelY = player.actionTarget.y + 0.6 - (player.speed * 0.1); // Target just above collision
-                
-                player.targetX = targetPixelX;
-                player.targetY = targetPixelY;
+            
+            // Check if movement has stopped. This happens if path is empty OR if physics prevents movement.
+            const movementStopped = player.path.length === 0 || (player.pixelX === player.prevPixelX && player.pixelY === player.prevPixelY);
 
-                const dx = player.targetX - player.pixelX;
-                const dy = player.targetY - player.pixelY;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+            if (movementStopped) {
+                 // Check if we are now touching the tree trunk
+                const treeHitbox = {
+                    x: player.actionTarget.x + 0.4375,
+                    y: player.actionTarget.y + 0.5,
+                    width: 0.125,
+                    height: 0.5
+                };
+                const playerHitbox = getPlayerHitbox(player);
+                // Inflate tree hitbox slightly for easier interaction.
+                // The size is increased to ensure a player on an adjacent tile can interact.
+                const interactionHitbox = {
+                    x: treeHitbox.x - 0.45,
+                    y: treeHitbox.y - 0.45,
+                    width: treeHitbox.width + 0.9,
+                    height: treeHitbox.height + 0.9,
+                };
 
-                if (dist > 0.05) { // If not already close
-                    updateMoveToTarget(player, deltaTime, gameMap, true);
-                } else { // Close enough, start chopping
-                     beginChopping(player, gameMap, game);
+                const isTouching = (
+                    playerHitbox.x < interactionHitbox.x + interactionHitbox.width &&
+                    playerHitbox.x + playerHitbox.width > interactionHitbox.x &&
+                    playerHitbox.y < interactionHitbox.y + interactionHitbox.height &&
+                    playerHitbox.y + playerHitbox.height > interactionHitbox.y
+                );
+
+                if (isTouching) {
+                    beginChopping(player, gameMap, game);
+                } else {
+                    console.warn(`[${player.username}] Arrived near tree but not touching. Finding new tree.`);
+                    startChoppingCycle(player, gameMap);
                 }
             }
             break;

@@ -124,6 +124,8 @@ export class Map {
     }
 
     isPixelColliding(pixelX, pixelY) {
+        // This function is obsolete and will be replaced by the new physics engine.
+        // Keeping it for now to avoid breaking other parts, but it should not be used for movement.
         const gridX = Math.floor(pixelX);
         const gridY = Math.floor(pixelY);
         const tileYOffset = pixelY - gridY;
@@ -135,11 +137,11 @@ export class Map {
         const tileType = this.grid[gridY][gridX];
     
         if (tileType === TILE_TYPE.TREE) {
-            // Collision only on the bottom 40% of the tile (the trunk)
+            // Legacy collision: bottom 40%
             return tileYOffset > 0.6;
         }
     
-        return false; // Only trees have special collision for now
+        return false;
     }
 
     findAll(tileTypes) {

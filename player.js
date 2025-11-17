@@ -14,6 +14,8 @@ import { applySeparation } from './player-movement.js';
 export const ENERGY_DURATION_MS = 3600 * 1000; // This will now be controlled by settings
 
 function findNearestEmptySpot(gridX, gridY, gameMap) {
+    // This entire function is part of the problematic "stuck" system and is being removed.
+    // A robust collision system makes this obsolete.
     if (!gameMap.isColliding(gridX, gridY)) {
         return { x: gridX, y: gridY };
     }
@@ -63,6 +65,8 @@ export class Player {
         this.targetX = 0;
         this.targetY = 0;
         this.path = []; // Path for A* movement
+        this.prevPixelX = 0; // For stuck detection
+        this.prevPixelY = 0; // For stuck detection
 
         // For collision avoidance
         const angle = Math.random() * 2 * Math.PI;
@@ -238,15 +242,9 @@ export class Player {
         ) {
             console.warn(`[${this.username}] Invalid or occupied position on load (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}). Finding nearest empty spot.`);
             
-            const newPos = findNearestEmptySpot(currentGridX, currentGridY, gameMap);
-            this.pixelX = newPos.x;
-            this.pixelY = newPos.y;
-            this.targetX = newPos.x;
-            this.targetY = newPos.y;
-
-            console.log(`[${this.username}] Relocated to (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}).`);
-
-            // After repositioning, reset state to avoid conflicts with old invalid targets
+            // The "stuck" logic is being removed. If a player loads inside an object,
+            // the new separation and collision logic should push them out gently.
+            // We will just log it for now. A better solution might be needed if this happens often.
             this.state = PLAYER_STATE.IDLE;
             this.actionTarget = null;
             this.path = [];
@@ -308,23 +306,8 @@ export class Player {
     }
 
     update(deltaTime, gameMap, allPlayers, game) {
-        const currentGridX = Math.round(this.pixelX);
-        const currentGridY = Math.round(this.pixelY);
-        
         // Apply separation from other players to prevent overlap
         applySeparation(this, allPlayers, gameMap);
-        
-        if (gameMap.isColliding(currentGridX, currentGridY)) {
-            console.warn(`[${this.username}] Detected player stuck in an obstacle at (${currentGridX}, ${currentGridY}). Moving to safety.`);
-            const newPos = findNearestEmptySpot(currentGridX, currentGridY, gameMap);
-            this.pixelX = newPos.x;
-            this.pixelY = newPos.y;
-            this.targetX = newPos.x;
-            this.targetY = newPos.y;
-            this.path = [];
-            this.state = PLAYER_STATE.IDLE;
-            return; // Skip the rest of the update for this frame
-        }
         
         if (this.isPowered()) {
             const hadPower = this.energy.update(deltaTime);
