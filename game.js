@@ -1,15 +1,25 @@
 import { Player } from './player.js';
 import { Map as GameMap } from './map.js';
 import { startChoppingCycle, startGatheringCycle } from './player-actions.js';
+import { AudioManager } from './audio-manager.js';
+import { PLAYER_STATE } from './player-state.js';
 
 const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
 const MAP_STORAGE_PREFIX = 'twitch_game_map_';
 
 export class Game {
-    constructor(canvas, channel) {
+    constructor(canvas, channel, worldName = 'default') {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.channel = channel; // Store channel name
+        this.channel = channel;
+        this.worldName = worldName;
+        this.playersStorageKey = this.worldName === 'default' 
+            ? `${PLAYERS_STORAGE_PREFIX}${this.channel}`
+            : `${PLAYERS_STORAGE_PREFIX}${this.channel}_${this.worldName}`;
+        this.mapStorageKey = this.worldName === 'default'
+            ? `${MAP_STORAGE_PREFIX}${this.channel}`
+            : `${MAP_STORAGE_PREFIX}${this.channel}_${this.worldName}`;
+
         this.players = new Map();
         this.map = new GameMap(32); // TileSize is 32
 
@@ -50,7 +60,7 @@ export class Game {
         }
         
         try {
-            localStorage.setItem(PLAYERS_STORAGE_PREFIX + this.channel, JSON.stringify(playerStates));
+            localStorage.setItem(this.playersStorageKey, JSON.stringify(playerStates));
             // User requested console logging coordinates
             if (this.players.size > 0) {
                 const samplePlayer = this.players.values().next().value;
@@ -68,8 +78,8 @@ export class Game {
             treeRespawns: this.map.treeRespawns
         };
         try {
-            localStorage.setItem(MAP_STORAGE_PREFIX + this.channel, JSON.stringify(mapData));
-            console.log('[Persistence] Saved map data.');
+            localStorage.setItem(this.mapStorageKey, JSON.stringify(mapData));
+            console.log(`[Persistence] Saved map data for world: ${this.worldName}.`);
         } catch (e) {
             console.error("Could not save map data to localStorage:", e);
         }
@@ -77,15 +87,15 @@ export class Game {
 
     loadMap() {
         try {
-            const data = localStorage.getItem(MAP_STORAGE_PREFIX + this.channel);
+            const data = localStorage.getItem(this.mapStorageKey);
             if (data) {
                 const mapData = JSON.parse(data);
                 this.map.grid = mapData.grid;
                 this.map.treeRespawns = mapData.treeRespawns || [];
-                console.log('[Persistence] Loaded map data from localStorage.');
+                console.log(`[Persistence] Loaded map data from localStorage for world: ${this.worldName}.`);
             } else {
                 this.map.generateMap();
-                console.log('[Persistence] No map data found. Generated a new map.');
+                console.log(`[Persistence] No map data found for world: ${this.worldName}. Generated a new map.`);
                 this.saveMap();
             }
         } catch(e) {
@@ -96,7 +106,7 @@ export class Game {
 
     loadPlayers() {
         try {
-            const data = localStorage.getItem(PLAYERS_STORAGE_PREFIX + this.channel);
+            const data = localStorage.getItem(this.playersStorageKey);
             if (data) {
                 const playerStates = JSON.parse(data);
                 for (const id in playerStates) {
@@ -110,7 +120,7 @@ export class Game {
                         this.players.set(id, player);
                     }
                 }
-                console.log(`[Persistence] Loaded ${this.players.size} player states from localStorage for channel ${this.channel}.`);
+                console.log(`[Persistence] Loaded ${this.players.size} player states from localStorage for channel ${this.channel}, world ${this.worldName}.`);
                 
                 // After loading all players and the map, validate their states
                 for (const player of this.players.values()) {
@@ -136,12 +146,18 @@ export class Game {
         }
     }
 
-    handlePlayerCommand(userId, command) {
+    handlePlayerCommand(userId, command, args) {
         const player = this.players.get(userId);
         if (!player) return;
 
+        if (!player.isPowered()) {
+             console.log(`Player ${player.username} issued command "${command}" but has no energy.`);
+             // Allow setting the command even without energy, it will start when they get some.
+        }
+
         if (command === 'chop') {
             player.activeCommand = 'chop';
+            player.followTargetId = null;
             if (player.isPowered()) {
                 startChoppingCycle(player, this.map);
                 console.log(`Player ${player.username} initiated !chop command.`);
@@ -150,11 +166,50 @@ export class Game {
             }
         } else if (command === 'gather') {
             player.activeCommand = 'gather';
+            player.followTargetId = null;
             if (player.isPowered()) {
                 startGatheringCycle(player, this.map);
                 console.log(`Player ${player.username} initiated !gather command.`);
             } else {
                 console.log(`Player ${player.username} set !gather command. It will start when it has energy.`);
+            }
+        } else if (command === 'follow') {
+            let targetPlayer = null;
+            if (args && args.targetUsername) {
+                const targetUsernameLower = args.targetUsername.toLowerCase();
+                // Find any player, even offline, to store their ID. The follow logic will handle if they are powered or not.
+                targetPlayer = Array.from(this.players.values()).find(p => p.username.toLowerCase() === targetUsernameLower);
+                 if (!targetPlayer) {
+                    console.log(`[${player.username}] Could not find any player (online or off) named "${args.targetUsername}".`);
+                    return;
+                }
+            } else {
+                // Find nearest powered player
+                let minDistance = Infinity;
+                for (const otherPlayer of this.players.values()) {
+                    if (otherPlayer.id === player.id || !otherPlayer.isPowered()) continue;
+                    const dx = otherPlayer.pixelX - player.pixelX;
+                    const dy = otherPlayer.pixelY - player.pixelY;
+                    const distance = dx * dx + dy * dy;
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        targetPlayer = otherPlayer;
+                    }
+                }
+            }
+
+            if (targetPlayer) {
+                player.activeCommand = 'follow';
+                player.followTargetId = targetPlayer.id;
+                if (player.isPowered()) {
+                    player.state = PLAYER_STATE.FOLLOWING;
+                }
+                console.log(`[${player.username}] will now follow ${targetPlayer.username}.`);
+            } else {
+                console.log(`[${player.username}] Could not find anyone nearby to follow.`);
+                if (player.isPowered()) {
+                    player.state = PLAYER_STATE.IDLE;
+                }
             }
         }
     }
@@ -235,7 +290,7 @@ export class Game {
         this.map.update(this.players);
 
         for (const player of this.players.values()) {
-            player.update(deltaTime, this.map);
+            player.update(deltaTime, this.map, this.players);
         }
     }
     
@@ -305,6 +360,11 @@ export class Game {
                 cameraY = -(this.canvas.height - mapPixelHeight) / 2;
             }
         }
+        
+        // Update AudioManager with the listener's position (center of the screen in world coordinates)
+        const listenerX = cameraX + this.canvas.width / 2;
+        const listenerY = cameraY + this.canvas.height / 2;
+        AudioManager.setListenerPosition(listenerX, listenerY, tileSize);
         
         const { drawStartX, drawEndX, drawStartY, drawEndY } = this.getVisibleTileRange(cameraX, cameraY);
         this.map.renderBase(this.ctx, cameraX, cameraY, drawStartX, drawEndX, drawStartY, drawEndY);

@@ -2,6 +2,7 @@ import { PLAYER_STATE } from './player-state.js';
 import { updateAction, startChoppingCycle, setChopTarget, startGatheringCycle } from './player-actions.js';
 import { renderPlayer } from './player-renderer.js';
 import { TILE_TYPE } from './map-tile-types.js';
+import { findPath } from './pathfinding.js';
 
 export const ENERGY_DURATION_MS = 3600 * 1000; // 1 hour (3600 seconds)
 
@@ -23,6 +24,7 @@ export class Player {
         this.pixelY = 0;
         this.targetX = 0;
         this.targetY = 0;
+        this.path = []; // Path for A* movement
         
         this.isPositioned = false; // Flag to track initialization
 
@@ -39,6 +41,7 @@ export class Player {
         this.inventory = { logs: [], leaves: [] };
         this.pendingHarvest = []; // {x, y, type} for bushes
         this.activeCommand = null;
+        this.followTargetId = null;
         this.lastSearchPosition = null; // For gathering wander logic
         this.skills = {
             woodcutting: [],
@@ -111,11 +114,13 @@ export class Player {
             energyTimestamps: this.energyTimestamps, // Store timestamps
             pixelX: this.pixelX,
             pixelY: this.pixelY,
+            path: this.path,
             inventory: this.inventory,
             state: this.state,
             actionTarget: this.actionTarget, // Save the action target
             pendingHarvest: this.pendingHarvest,
             activeCommand: this.activeCommand,
+            followTargetId: this.followTargetId,
             lastSearchPosition: this.lastSearchPosition,
             skills: this.skills,
         };
@@ -134,6 +139,8 @@ export class Player {
             this.isPositioned = true; // Loaded state implies positioned
         }
         
+        this.path = state.path || [];
+
         // Load energyTimestamps
         if (state.energyTimestamps && Array.isArray(state.energyTimestamps)) {
             this.energyTimestamps = state.energyTimestamps;
@@ -154,6 +161,7 @@ export class Player {
         this.pendingHarvest = state.pendingHarvest || [];
         this.skills = state.skills || { woodcutting: [], gathering: [] };
         this.activeCommand = state.activeCommand || null;
+        this.followTargetId = state.followTargetId || null;
         this.lastSearchPosition = state.lastSearchPosition || null;
 
         this.actionTarget = state.actionTarget || null; // Restore the action target
@@ -164,10 +172,35 @@ export class Player {
             console.warn(`[${this.username}] Restored to CHOPPING state without a valid actionTarget. Resetting to IDLE.`);
             this.state = PLAYER_STATE.IDLE;
         }
+
+        if (this.state === PLAYER_STATE.FOLLOWING && !this.followTargetId) {
+            console.warn(`[${this.username}] Restored to FOLLOWING state without a valid followTargetId. Resetting to IDLE.`);
+            this.state = PLAYER_STATE.IDLE;
+        }
     }
 
     // New method to validate state after map is loaded
     validateState(gameMap) {
+        // Validate player position first
+        const currentGridX = Math.round(this.pixelX);
+        const currentGridY = Math.round(this.pixelY);
+
+        if (
+            currentGridX < 0 || currentGridX >= gameMap.width ||
+            currentGridY < 0 || currentGridY >= gameMap.height ||
+            gameMap.isColliding(currentGridX, currentGridY)
+        ) {
+            console.warn(`[${this.username}] Invalid or occupied position on load (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}). Finding a new spot.`);
+            this.isPositioned = false; // Reset positioned flag
+            this.setInitialPosition(gameMap);
+            console.log(`[${this.username}] Relocated to (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}).`);
+            // After repositioning, reset state to avoid conflicts with old invalid targets
+            this.state = PLAYER_STATE.IDLE;
+            this.actionTarget = null;
+            this.path = [];
+            return; // Exit validation early as state has been reset
+        }
+
         const stateToTileType = {
             [PLAYER_STATE.MOVING_TO_TREE]: TILE_TYPE.TREE,
             [PLAYER_STATE.CHOPPING]: TILE_TYPE.TREE,
@@ -189,21 +222,31 @@ export class Player {
                 console.warn(`[${this.username}] Invalid target for state ${this.state}. Target tile at (${target?.x}, ${target?.y}) is missing or incorrect. Resetting to IDLE.`);
                 this.state = PLAYER_STATE.IDLE;
                 this.actionTarget = null;
+                this.path = []; // Clear the path as well
             } else {
                 // Target is valid, re-initialize movement if needed
                 if (this.state === PLAYER_STATE.MOVING_TO_TREE) {
                     console.log(`[${this.username}] Re-initializing move target for state ${this.state}.`);
                     setChopTarget(this, gameMap, this.actionTarget);
                 } else if (this.state === PLAYER_STATE.MOVING_TO_LOGS || this.state === PLAYER_STATE.MOVING_TO_BUSHES) {
-                    console.log(`[${this.username}] Re-initializing move target for state ${this.state}.`);
-                    this.targetX = this.actionTarget.x;
-                    this.targetY = this.actionTarget.y;
+                    console.log(`[${this.username}] Re-calculating path for state ${this.state}.`);
+                    const startX = Math.round(this.pixelX);
+                    const startY = Math.round(this.pixelY);
+                    const path = findPath(startX, startY, this.actionTarget.x, this.actionTarget.y, gameMap);
+                    if (path) {
+                        this.path = path;
+                    } else {
+                        console.warn(`[${this.username}] Path to valid target for ${this.state} is blocked. Resetting.`);
+                        this.state = PLAYER_STATE.IDLE;
+                        this.actionTarget = null;
+                        this.path = [];
+                    }
                 }
             }
         }
     }
 
-    update(deltaTime, gameMap) {
+    update(deltaTime, gameMap, allPlayers) {
         
         if (this.isPowered()) {
             // 1. Energy Draining Logic
@@ -253,15 +296,16 @@ export class Player {
             // If player is idle but has an active command, restart the task.
             if (this.state === PLAYER_STATE.IDLE && this.activeCommand) {
                 if (this.activeCommand === 'chop') {
-                    this.startChoppingCycle(gameMap);
-                }
-                if (this.activeCommand === 'gather') {
-                    this.startGatheringCycle(gameMap);
+                    startChoppingCycle(this, gameMap);
+                } else if (this.activeCommand === 'gather') {
+                    startGatheringCycle(this, gameMap);
+                } else if (this.activeCommand === 'follow') {
+                    this.state = PLAYER_STATE.FOLLOWING;
                 }
             }
 
             // State Machine for actions
-            updateAction(this, deltaTime, gameMap);
+            updateAction(this, deltaTime, gameMap, allPlayers);
 
         }
     }
