@@ -3,6 +3,7 @@ import { findPath } from '../pathfinding.js';
 import { updateWander, updateFollowPath } from '../player-movement.js';
 import { startChoppingCycle } from './chopping.js';
 import { startGatheringCycle } from './gathering.js';
+import { TILE_TYPE } from '../map-tile-types.js';
 
 const WOODCUTTING_STATES = [PLAYER_STATE.MOVING_TO_TREE, PLAYER_STATE.CHOPPING];
 const GATHERING_STATES = [PLAYER_STATE.MOVING_TO_LOGS, PLAYER_STATE.HARVESTING_LOGS, PLAYER_STATE.MOVING_TO_BUSHES, PLAYER_STATE.HARVESTING_BUSHES, PLAYER_STATE.SEARCHING_FOR_GATHERABLE, PLAYER_STATE.WANDERING_TO_GATHER];
@@ -24,6 +25,29 @@ export function updateFollow(player, gameMap, allPlayers, deltaTime) {
 
     // If too far, move closer
     if (distance > 8) {
+        // If not already on a path, check for opportunistic gathering
+        if (player.path.length === 0) {
+            const nearbyGatherable = gameMap.findNearestInRadius(player.pixelX, player.pixelY, [TILE_TYPE.LOGS, TILE_TYPE.BUSHES], 5); // check in a 5-tile radius
+
+            if (nearbyGatherable) {
+                const startX = Math.round(player.pixelX);
+                const startY = Math.round(player.pixelY);
+                const path = findPath(startX, startY, nearbyGatherable.x, nearbyGatherable.y, gameMap);
+
+                if (path) {
+                    console.log(`[${player.username}] Following ${targetPlayer.username}, but found nearby gatherable at (${nearbyGatherable.x}, ${nearbyGatherable.y}). Pausing to gather.`);
+                    player.actionTarget = nearbyGatherable;
+                    player.path = path;
+                    if (nearbyGatherable.type === TILE_TYPE.LOGS) {
+                        player.state = PLAYER_STATE.MOVING_TO_LOGS;
+                    } else {
+                        player.state = PLAYER_STATE.MOVING_TO_BUSHES;
+                    }
+                    return; // Exit updateFollow for this frame, the main loop will handle the gathering state
+                }
+            }
+        }
+        
         // Only find a new path if not already moving
         if (player.path.length === 0) {
             const startX = Math.round(player.pixelX);
@@ -66,6 +90,15 @@ export function updateFollow(player, gameMap, allPlayers, deltaTime) {
     
     // Within range, so stop moving
     player.path = [];
+
+    // If there are pending resources to harvest from a previous action, do that first.
+    if (player.pendingHarvest.length > 0) {
+        // This can happen if the follower finishes chopping and is ready to gather,
+        // but this logic runs before the gathering state is initiated.
+        // We will let the gathering logic from other functions take priority.
+        // This check prevents re-initiating a new action while another is pending.
+        return;
+    }
 
     // Mimic target's actions
     if (WOODCUTTING_STATES.includes(targetPlayer.state)) {
