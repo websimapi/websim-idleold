@@ -1,7 +1,7 @@
 import { PLAYER_STATE } from '../player-state.js';
 import { TILE_TYPE } from '../map-tile-types.js';
 import { findPath } from '../pathfinding.js';
-import { findAndMoveToTree } from './chopping.js';
+import { startChoppingCycle } from './chopping.js';
 
 export function startGatheringCycle(player, gameMap) {
     player.state = PLAYER_STATE.SEARCHING_FOR_GATHERABLE;
@@ -57,7 +57,12 @@ export function startGatheringCycle(player, gameMap) {
     }
 }
 
-export function beginHarvestingLogs(player) {
+export function beginHarvestingLogs(player, gameMap) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.LOGS) {
+        console.log(`[${player.username}] Attempted to harvest logs that are already gone. Moving on.`);
+        harvestNextBush(player, gameMap);
+        return;
+    }
     player.state = PLAYER_STATE.HARVESTING_LOGS;
     player.actionTimer = 6;
     player.actionTotalTime = 6;
@@ -65,6 +70,11 @@ export function beginHarvestingLogs(player) {
 }
 
 export function finishHarvestingLogs(player, gameMap) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.LOGS) {
+        console.log(`[${player.username}] Finished harvesting, but logs were already gone. Moving on.`);
+        harvestNextBush(player, gameMap);
+        return;
+    }
     const numLogs = Math.floor(Math.random() * 3) + 1;
     for (let i = 0; i < numLogs; i++) {
         player.inventory.logs.push({ timestamp: Date.now() });
@@ -97,16 +107,21 @@ export function harvestNextBush(player, gameMap) {
         // No more bushes from the tree chop. Now, decide what to do next.
         if (player.activeCommand === 'follow') {
             player.state = PLAYER_STATE.FOLLOWING;
-        } else if (player.activeCommand === 'gather') {
+        } else if (player.activeCommand === 'gather' || player.state === PLAYER_STATE.WANDERING_TO_GATHER) {
             startGatheringCycle(player, gameMap);
         } else {
             // Default behavior (e.g., after !chop command is complete) is to find another tree.
-            findAndMoveToTree(player, gameMap);
+            startChoppingCycle(player, gameMap);
         }
     }
 }
 
-export function beginHarvestingBushes(player) {
+export function beginHarvestingBushes(player, gameMap) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.BUSHES) {
+        console.log(`[${player.username}] Attempted to harvest a bush that is already gone. Moving on.`);
+        harvestNextBush(player, gameMap);
+        return;
+    }
     player.state = PLAYER_STATE.HARVESTING_BUSHES;
     const duration = 2 + Math.random();
     player.actionTimer = duration;
@@ -115,6 +130,11 @@ export function beginHarvestingBushes(player) {
 }
 
 export function finishHarvestingBushes(player, gameMap) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.BUSHES) {
+        console.log(`[${player.username}] Finished harvesting, but the bush was already gone. Moving on.`);
+        harvestNextBush(player, gameMap);
+        return;
+    }
     const numLeaves = Math.floor(200 + Math.random() * 801); 
     player.inventory.leaves.push({ amount: numLeaves, timestamp: Date.now() });
     const totalLeaves = player.inventory.leaves.reduce((sum, item) => sum + item.amount, 0);

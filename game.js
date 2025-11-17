@@ -6,6 +6,8 @@ import { AudioManager } from './audio-manager.js';
 import { PLAYER_STATE } from './player-state.js';
 import { Camera } from './game/camera.js';
 import * as Persistence from './game/persistence.js';
+import { finishChopping } from './behaviors/chopping.js';
+import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './behaviors/index.js';
 
 export class Game {
     constructor(canvas, channel, worldName = 'default') {
@@ -21,9 +23,15 @@ export class Game {
         this.players = new Map();
         this.map = new GameMap(32); // TileSize is 32
         this.camera = new Camera(this.canvas, this.map, this.players);
+        this.activeChoppingTargets = new Map();
 
         Persistence.loadMap(this.map, this.mapStorageKey);
         Persistence.loadPlayers(this.players, this.playersStorageKey);
+
+        // Validate player states after loading everything
+        for (const player of this.players.values()) {
+            player.validateState(this.map, this);
+        }
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -50,6 +58,61 @@ export class Game {
         if (e.code === 'Space') {
             e.preventDefault();
             this.camera.switchToNextPlayerFocus();
+        }
+    }
+
+    updateActiveChopping(deltaTime) {
+        const CHOP_WORK = 11000; // ms
+        const finishedTargets = [];
+    
+        for (const [targetId, chopData] of this.activeChoppingTargets.entries()) {
+            // Clean up choppers who are no longer chopping this target
+            for (const playerId of chopData.choppers) {
+                const player = this.players.get(playerId);
+                const playerTargetId = player?.actionTarget ? `${player.actionTarget.x},${player.actionTarget.y}` : null;
+                if (!player || player.state !== PLAYER_STATE.CHOPPING || playerTargetId !== targetId) {
+                    chopData.choppers.delete(playerId);
+                }
+            }
+            
+            if (chopData.choppers.size === 0) {
+                this.activeChoppingTargets.delete(targetId);
+                continue;
+            }
+    
+            const workDone = chopData.choppers.size * deltaTime * 1000;
+            chopData.remainingWork -= workDone;
+    
+            // Update individual player timers for UI
+            for (const playerId of chopData.choppers) {
+                const player = this.players.get(playerId);
+                if (player) { // Player should exist as we just validated
+                    player.actionTimer = Math.max(0, chopData.remainingWork / 1000);
+                    player.actionTotalTime = CHOP_WORK / 1000;
+                }
+            }
+            
+            if (chopData.remainingWork <= 0) {
+                finishedTargets.push(targetId);
+            }
+        }
+    
+        for (const targetId of finishedTargets) {
+            const chopData = this.activeChoppingTargets.get(targetId);
+            if (!chopData) continue;
+    
+            // Find one player to "finish" the chop and spawn resources
+            const finisherId = chopData.choppers.values().next().value;
+            const finisher = this.players.get(finisherId);
+    
+            if (finisher) {
+                // This player will cut the tree, change map tile, and generate logs/bushes
+                // Other players will see the tile change and call treeHasBeenChopped
+                finishChopping(finisher, this.map, this, this.players);
+            } else {
+                 // No valid finisher, just remove the target
+                 this.activeChoppingTargets.delete(targetId);
+            }
         }
     }
 
@@ -187,11 +250,12 @@ export class Game {
 
     update(deltaTime) {
         this.camera.update(deltaTime);
+        this.updateActiveChopping(deltaTime);
 
         this.map.update(this.players);
 
         for (const player of this.players.values()) {
-            player.update(deltaTime, this.map, this.players);
+            player.update(deltaTime, this.map, this.players, this);
         }
     }
     
