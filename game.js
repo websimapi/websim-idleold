@@ -193,6 +193,7 @@ export class Game {
             return;
         }
         let player = this.players.get(chatter.id);
+        const wasPoweredBefore = player ? player.isPowered() : false;
 
         if (!player) {
             // Truly new player (not in persistence or current map)
@@ -205,8 +206,7 @@ export class Game {
             console.log(`Player ${chatter.username} joined.`);
             
             if (!this.camera.focusedPlayerId) {
-                this.camera.focusedPlayerId = chatter.id;
-                this.camera.focusTimer = this.camera.FOCUS_DURATION;
+                this.camera.setFocus(chatter.id);
             }
         } else {
              // Existing player (loaded from storage or currently active)
@@ -217,6 +217,12 @@ export class Game {
 
         player.addEnergy();
         console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energy.timestamps.length}`);
+
+        // If a player who was not active just gained energy, and the camera is idle, focus on them.
+        if (!wasPoweredBefore && player.isPowered() && !this.camera.focusedPlayerId) {
+            console.log(`Camera was idle, now focusing on newly active player: ${player.username}`);
+            this.camera.setFocus(player.id);
+        }
     }
 
     start() {

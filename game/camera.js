@@ -12,6 +12,15 @@ export class Camera {
         this.FOCUS_DURATION = 60; // seconds
     }
 
+    setFocus(playerId) {
+        this.focusedPlayerId = playerId;
+        this.focusTimer = this.FOCUS_DURATION;
+        const player = this.players.get(playerId);
+        if (player) {
+            console.log(`Camera focusing on: ${player.username} for ${this.FOCUS_DURATION} seconds.`);
+        }
+    }
+
     update(deltaTime) {
         this.focusTimer -= deltaTime;
         if (this.focusTimer <= 0) {
