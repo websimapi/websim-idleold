@@ -11,6 +11,38 @@ export const ENERGY_DURATION_MS = 3600 * 1000; // 1 hour (3600 seconds)
 
 const MAX_ENERGY_SLOTS = 12;
 
+function findNearestEmptySpot(gridX, gridY, gameMap) {
+    if (!gameMap.isColliding(gridX, gridY)) {
+        return { x: gridX, y: gridY };
+    }
+
+    let radius = 1;
+    // Limit search radius to prevent infinite loops on a completely full map
+    while (radius < Math.max(gameMap.width, gameMap.height) / 2) { 
+        for (let i = -radius; i <= radius; i++) {
+            for (let j = -radius; j <= radius; j++) {
+                // Only check the perimeter of the search square
+                if (Math.abs(i) !== radius && Math.abs(j) !== radius) {
+                    continue;
+                }
+
+                const newX = gridX + i;
+                const newY = gridY + j;
+
+                if (newX >= 0 && newX < gameMap.width && newY >= 0 && newY < gameMap.height) {
+                    if (!gameMap.isColliding(newX, newY)) {
+                        return { x: newX, y: newY };
+                    }
+                }
+            }
+        }
+        radius++;
+    }
+
+    console.error(`Could not find any empty spot near (${gridX}, ${gridY})`);
+    return { x: 0, y: 0 }; // Fallback to origin
+}
+
 export class Player {
     constructor(id, username, color) {
         this.id = id;
@@ -218,10 +250,16 @@ export class Player {
             currentGridY < 0 || currentGridY >= gameMap.height ||
             gameMap.isColliding(currentGridX, currentGridY)
         ) {
-            console.warn(`[${this.username}] Invalid or occupied position on load (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}). Finding a new spot.`);
-            this.isPositioned = false; // Reset positioned flag
-            this.setInitialPosition(gameMap);
+            console.warn(`[${this.username}] Invalid or occupied position on load (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}). Finding nearest empty spot.`);
+            
+            const newPos = findNearestEmptySpot(currentGridX, currentGridY, gameMap);
+            this.pixelX = newPos.x;
+            this.pixelY = newPos.y;
+            this.targetX = newPos.x;
+            this.targetY = newPos.y;
+
             console.log(`[${this.username}] Relocated to (${this.pixelX.toFixed(2)}, ${this.pixelY.toFixed(2)}).`);
+
             // After repositioning, reset state to avoid conflicts with old invalid targets
             this.state = PLAYER_STATE.IDLE;
             this.actionTarget = null;
@@ -284,6 +322,20 @@ export class Player {
     }
 
     update(deltaTime, gameMap, allPlayers, game) {
+        const currentGridX = Math.round(this.pixelX);
+        const currentGridY = Math.round(this.pixelY);
+        
+        if (gameMap.isColliding(currentGridX, currentGridY)) {
+            console.warn(`[${this.username}] Detected player stuck in an obstacle at (${currentGridX}, ${currentGridY}). Moving to safety.`);
+            const newPos = findNearestEmptySpot(currentGridX, currentGridY, gameMap);
+            this.pixelX = newPos.x;
+            this.pixelY = newPos.y;
+            this.targetX = newPos.x;
+            this.targetY = newPos.y;
+            this.path = [];
+            this.state = PLAYER_STATE.IDLE;
+            return; // Skip the rest of the update for this frame
+        }
         
         if (this.isPowered()) {
             // 1. Energy Draining Logic
