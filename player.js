@@ -137,10 +137,14 @@ export class Player {
         }
     }
 
-    addEnergy() {
-        if (this.energyTimestamps.length < MAX_ENERGY_SLOTS) {
-            // Add current timestamp for a new energy cell
-            this.energyTimestamps.push(Date.now());
+    addEnergy(amount = 1) {
+        for (let i = 0; i < amount; i++) {
+            if (this.energyTimestamps.length < MAX_ENERGY_SLOTS) {
+                // Add current timestamp for a new energy cell
+                this.energyTimestamps.push(Date.now());
+            } else {
+                break; // Stop if slots are full
+            }
         }
     }
 

@@ -2,6 +2,7 @@ import { Player } from '../player.js';
 
 const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
 const MAP_STORAGE_PREFIX = 'twitch_game_map_';
+const HOSTS_STORAGE_PREFIX = 'twitch_game_hosts_';
 
 export function getStorageKeys(channel, worldName) {
     const playersStorageKey = worldName === 'default' 
@@ -10,7 +11,10 @@ export function getStorageKeys(channel, worldName) {
     const mapStorageKey = worldName === 'default'
         ? `${MAP_STORAGE_PREFIX}${channel}`
         : `${MAP_STORAGE_PREFIX}${channel}_${worldName}`;
-    return { playersStorageKey, mapStorageKey };
+    const hostsStorageKey = worldName === 'default'
+        ? `${HOSTS_STORAGE_PREFIX}${channel}`
+        : `${HOSTS_STORAGE_PREFIX}${channel}_${worldName}`;
+    return { playersStorageKey, mapStorageKey, hostsStorageKey };
 }
 
 export function savePlayers(players, playersStorageKey) {
@@ -62,6 +66,26 @@ export function loadMap(gameMap, mapStorageKey) {
     } catch(e) {
         console.error("Could not load map data, generating new map.", e);
         gameMap.generateMap();
+    }
+}
+
+export function loadHosts(hostsStorageKey) {
+    try {
+        const data = localStorage.getItem(hostsStorageKey);
+        if (data) {
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error("Could not load host data from localStorage:", e);
+    }
+    return []; // Return empty array if not found or error
+}
+
+export function saveHosts(hosts, hostsStorageKey) {
+    try {
+        localStorage.setItem(hostsStorageKey, JSON.stringify(hosts));
+    } catch (e) {
+        console.error("Could not save host data to localStorage:", e);
     }
 }
 

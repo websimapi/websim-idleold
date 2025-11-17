@@ -1,10 +1,12 @@
 import { initTwitch } from './twitch.js';
 import { Game } from './game.js';
 import { AudioManager } from './audio-manager.js';
+import * as Persistence from './game/persistence.js';
 
 const connectContainer = document.getElementById('connect-container');
 const worldSelectContainer = document.getElementById('world-select-container');
 const worldList = document.getElementById('world-list');
+const worldSettingsContainer = document.getElementById('world-settings-container');
 const gameContainer = document.getElementById('game-container');
 const channelInput = document.getElementById('channel-input');
 const connectBtn = document.getElementById('connect-btn');
@@ -17,9 +19,10 @@ const STORAGE_KEY = 'twitch_channel_name';
 const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
 const MAP_STORAGE_PREFIX = 'twitch_game_map_';
 
-function showGame() {
+function showGame(channel, worldName, hosts) {
     worldSelectContainer.classList.add('hidden');
     gameContainer.classList.remove('hidden');
+    startGame(channel, worldName, hosts);
 }
 
 function showWorldSelect(channel) {
@@ -27,6 +30,72 @@ function showWorldSelect(channel) {
     worldSelectContainer.classList.remove('hidden');
     document.getElementById('world-select-title').textContent = `Worlds for #${channel}`;
     populateWorldList(channel);
+}
+
+function showWorldSettings(channel, worldName) {
+    worldSettingsContainer.classList.remove('hidden');
+    worldSettingsContainer.innerHTML = `
+        <h2>World Settings: <span style="color: #f0f0f0;">${worldName}</span></h2>
+        <div class="settings-section host-management">
+            <label for="host-input">Manage Hosts</label>
+            <p style="font-size: 14px; color: #aaa; margin: 0;">Hosts can use special commands in-game.</p>
+            <div class="host-input-group">
+                <input type="text" id="host-input" placeholder="Enter username...">
+                <button id="add-host-btn">Add Host</button>
+            </div>
+            <ul id="host-list"></ul>
+        </div>
+        <button id="play-btn">Play</button>
+    `;
+
+    const { hostsStorageKey } = Persistence.getStorageKeys(channel, worldName);
+    let hosts = Persistence.loadHosts(hostsStorageKey);
+
+    const hostListEl = document.getElementById('host-list');
+    const hostInputEl = document.getElementById('host-input');
+    const addHostBtn = document.getElementById('add-host-btn');
+    const playBtn = document.getElementById('play-btn');
+
+    function renderHosts() {
+        hostListEl.innerHTML = '';
+        hosts.forEach(host => {
+            const li = document.createElement('li');
+            li.className = 'host-item';
+            li.textContent = host;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-host-btn';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.onclick = () => {
+                hosts = hosts.filter(h => h !== host);
+                Persistence.saveHosts(hosts, hostsStorageKey);
+                renderHosts();
+            };
+            li.appendChild(removeBtn);
+            hostListEl.appendChild(li);
+        });
+    }
+    
+    addHostBtn.addEventListener('click', () => {
+        const newHost = hostInputEl.value.trim().toLowerCase();
+        if (newHost && !hosts.includes(newHost)) {
+            hosts.push(newHost);
+            Persistence.saveHosts(hosts, hostsStorageKey);
+            renderHosts();
+            hostInputEl.value = '';
+        }
+    });
+
+    hostInputEl.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addHostBtn.click();
+        }
+    });
+
+    playBtn.addEventListener('click', () => {
+        showGame(channel, worldName, hosts);
+    });
+
+    renderHosts();
 }
 
 function populateWorldList(channel) {
@@ -57,7 +126,10 @@ function populateWorldList(channel) {
 
         worldEl.addEventListener('click', (e) => {
             if (e.target.classList.contains('export-btn')) return;
-            startGame(channel, worldName);
+            // Deselect others, select this one
+            document.querySelectorAll('.world-item.selected').forEach(el => el.classList.remove('selected'));
+            worldEl.classList.add('selected');
+            showWorldSettings(channel, worldName);
         });
         
         const exportBtn = worldEl.querySelector('.export-btn');
@@ -219,13 +291,13 @@ function processImportedWorld(worldData) {
     populateWorldList(channel);
 }
 
-function startGame(channel, worldName) {
+function startGame(channel, worldName, hosts) {
     console.log(`Connecting to #${channel}, world: ${worldName}...`);
-    showGame();
+    // showGame(); // showGame is now the entry point
 
     AudioManager.init();
 
-    const game = new Game(canvas, channel, worldName);
+    const game = new Game(canvas, channel, worldName, hosts);
     
     initTwitch(
         channel, 

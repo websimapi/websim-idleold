@@ -46,7 +46,10 @@ export function initTwitch(channel, onChatter, onCommand) {
         }
 
         // Handle commands on every message
-        const command = message.trim().toLowerCase();
+        const commandText = message.trim();
+        const parts = commandText.split(/\s+/);
+        const command = parts[0].toLowerCase();
+
         if (command === '!chop') {
             if (onCommand) {
                 onCommand(userId, 'chop');
@@ -55,11 +58,16 @@ export function initTwitch(channel, onChatter, onCommand) {
             if (onCommand) {
                 onCommand(userId, 'gather');
             }
-        } else if (command.startsWith('!follow')) {
+        } else if (command === '!follow') {
             if (onCommand) {
-                const parts = message.trim().split(/\s+/);
                 const targetUsername = parts.length > 1 ? parts[1].replace('@', '') : null;
                 onCommand(userId, 'follow', { targetUsername });
+            }
+        } else if (command === '!energy') {
+            if (onCommand) {
+                const amount = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+                const targetUsername = parts.length > 2 ? parts[2].replace('@', '') : null;
+                onCommand(userId, 'energy', { amount, targetUsername });
             }
         }
     });

@@ -10,11 +10,13 @@ import { finishChopping } from './behaviors/chopping.js';
 import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './behaviors/index.js';
 
 export class Game {
-    constructor(canvas, channel, worldName = 'default') {
+    constructor(canvas, channel, worldName = 'default', hosts = []) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.channel = channel;
         this.worldName = worldName;
+        this.hosts = new Set(hosts.map(h => h.toLowerCase()));
+        console.log("Game started with hosts:", this.hosts);
 
         const { playersStorageKey, mapStorageKey } = Persistence.getStorageKeys(this.channel, this.worldName);
         this.playersStorageKey = playersStorageKey;
@@ -119,6 +121,32 @@ export class Game {
     handlePlayerCommand(userId, command, args) {
         const player = this.players.get(userId);
         if (!player) return;
+
+        // --- Host Command Check ---
+        if (command === 'energy') {
+            if (!this.hosts.has(player.username.toLowerCase())) {
+                console.log(`[${player.username}] tried to use host command !energy but is not a host.`);
+                return;
+            }
+
+            const amount = args && !isNaN(args.amount) ? Math.max(1, Math.min(12, args.amount)) : 1;
+            let targetPlayer = player;
+
+            if (args && args.targetUsername) {
+                const targetUsernameLower = args.targetUsername.toLowerCase();
+                const foundTarget = Array.from(this.players.values()).find(p => p.username.toLowerCase() === targetUsernameLower);
+                if (foundTarget) {
+                    targetPlayer = foundTarget;
+                } else {
+                    console.log(`[${player.username}] tried to give energy to non-existent player "${args.targetUsername}".`);
+                    return; // Target not found
+                }
+            }
+            
+            targetPlayer.addEnergy(amount);
+            console.log(`[Host] ${player.username} gave ${amount} energy to ${targetPlayer.username}.`);
+            return;
+        }
 
         if (!player.isPowered()) {
              console.log(`Player ${player.username} issued command "${command}" but has no energy.`);
