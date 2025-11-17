@@ -1,5 +1,7 @@
 import { PLAYER_STATE } from './player-state.js';
-import { updateAction, startChoppingCycle, setChopTarget, startGatheringCycle } from './player-actions.js';
+import { updateAction } from './behaviors/player-behavior-updater.js';
+import { startChoppingCycle } from './behaviors/chopping.js';
+import { startGatheringCycle } from './behaviors/gathering.js';
 import { renderPlayer } from './player-renderer.js';
 import { TILE_TYPE } from './map-tile-types.js';
 import { findPath } from './pathfinding.js';
@@ -227,7 +229,10 @@ export class Player {
                 // Target is valid, re-initialize movement if needed
                 if (this.state === PLAYER_STATE.MOVING_TO_TREE) {
                     console.log(`[${this.username}] Re-initializing move target for state ${this.state}.`);
-                    setChopTarget(this, gameMap, this.actionTarget);
+                    // The setChopTarget function was complex and mostly duplicated findPath logic.
+                    // The path is already loaded, so we trust it or let it be recalculated by the behavior.
+                    // For now, we let the existing path be used by updateAction.
+                    // If issues arise, we can explicitly re-call findAndMoveToTree.
                 } else if (this.state === PLAYER_STATE.MOVING_TO_LOGS || this.state === PLAYER_STATE.MOVING_TO_BUSHES) {
                     console.log(`[${this.username}] Re-calculating path for state ${this.state}.`);
                     const startX = Math.round(this.pixelX);
