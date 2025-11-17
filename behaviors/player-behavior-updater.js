@@ -80,6 +80,16 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
                 const finalTargetY = player.actionTarget.y;
                 const currentSpotX = Math.round(player.pixelX);
                 const currentSpotY = Math.round(player.pixelY);
+
+                // If player is directly below the tree, don't do the final adjustment
+                // to avoid colliding with the tree trunk hitbox.
+                const isDirectlyBelow = currentSpotX === finalTargetX && currentSpotY === finalTargetY + 1;
+
+                if (isDirectlyBelow) {
+                    beginChopping(player, gameMap, game);
+                    return;
+                }
+
                 player.targetX = currentSpotX + (finalTargetX - currentSpotX) * 0.4;
                 player.targetY = currentSpotY + (finalTargetY - currentSpotY) * 0.4;
 
@@ -99,7 +109,13 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
                 return;
             }
             updateFollowPath(player, deltaTime, gameMap);
-            if (atMoveTarget) {
+
+            const dxLogs = player.pixelX - (player.actionTarget.x + 0.5);
+            const dyLogs = player.pixelY - (player.actionTarget.y + 0.5);
+            const distSqLogs = dxLogs * dxLogs + dyLogs * dyLogs;
+            const interactionDistSqLogs = 1.2 * 1.2;
+
+            if (atMoveTarget || distSqLogs < interactionDistSqLogs) {
                 beginHarvestingLogs(player, gameMap, game);
             }
             break;
@@ -110,7 +126,13 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
                 return;
             }
             updateFollowPath(player, deltaTime, gameMap);
-            if (atMoveTarget) {
+
+            const dxBushes = player.pixelX - (player.actionTarget.x + 0.5);
+            const dyBushes = player.pixelY - (player.actionTarget.y + 0.5);
+            const distSqBushes = dxBushes * dxBushes + dyBushes * dyBushes;
+            const interactionDistSqBushes = 1.2 * 1.2;
+
+            if (atMoveTarget || distSqBushes < interactionDistSqBushes) {
                 beginHarvestingBushes(player, gameMap, game);
             }
             break;
@@ -138,7 +160,7 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             // The main logic for timer countdown is now handled centrally in game.js
             // This block now only handles the intermittent chopping sound effect.
-            if (Math.floor(player.actionTimer) % 2 === 0 && Math.floor(player.actionTimer + deltaTime) % 2 !== 0) {
+            if (Math.floor(player.actionTotalTime - player.actionTimer) % 2 === 0 && Math.floor(player.actionTotalTime - (player.actionTimer - deltaTime)) % 2 !== 0) {
                  const chopSound = AudioManager.getBuffer('./chop.mp3');
                  AudioManager.play(chopSound, player.pixelX, player.pixelY);
             }

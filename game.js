@@ -5,7 +5,7 @@ import { startGatheringCycle } from './behaviors/gathering.js';
 import { AudioManager } from './audio-manager.js';
 import { PLAYER_STATE } from './player-state.js';
 import { Camera } from './game/camera.js';
-import * as Persistence from './game/persistence.js';
+import * as StorageManager from './storage-manager.js';
 import { finishChopping } from './behaviors/chopping.js';
 import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './behaviors/index.js';
 import { DEFAULT_GAME_SETTINGS } from './game-settings.js';
@@ -22,10 +22,6 @@ export class Game {
         console.log("Game started with hosts:", this.hosts);
         console.log("Game started with settings:", this.settings);
 
-        const { playersStorageKey, mapStorageKey } = Persistence.getStorageKeys(this.channel, this.worldName);
-        this.playersStorageKey = playersStorageKey;
-        this.mapStorageKey = mapStorageKey;
-
         this.players = new Map();
         this.map = new GameMap(32); // TileSize is 32
         this.camera = new Camera(this.canvas, this.map, this.players);
@@ -33,9 +29,37 @@ export class Game {
 
         setEnergyCooldown(this.settings.energy.chat_cooldown_seconds);
 
-        Persistence.loadMap(this.map, this.mapStorageKey);
-        Persistence.loadPlayers(this.players, this.playersStorageKey, this.settings);
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        window.addEventListener('keydown', (e) => this.handleKeyPress(e));
+        
+        this.saveInterval = setInterval(async () => {
+            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
+        }, 5000); // Save every 5 seconds
+    }
 
+    async init() {
+        await StorageManager.init(this.channel, this.worldName);
+        const gameState = await StorageManager.loadGameState(this.channel, this.worldName);
+
+        if (gameState.map && gameState.map.grid && gameState.map.grid.length > 0) {
+            this.map.grid = gameState.map.grid;
+            this.map.treeRespawns = gameState.map.treeRespawns || [];
+        } else {
+            this.map.generateMap();
+        }
+
+        if (gameState.players) {
+            for (const id in gameState.players) {
+                const state = gameState.players[id];
+                if (state && state.id && state.username) {
+                    const player = new Player(state.id, state.username, state.color, this.settings);
+                    player.loadState(state);
+                    this.players.set(id, player);
+                }
+            }
+        }
+        
         // Validate player states after loading everything
         for (const player of this.players.values()) {
             player.validateState(this.map, this);
@@ -43,11 +67,9 @@ export class Game {
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
-        window.addEventListener('keydown', (e) => this.handleKeyPress(e));
         
-        this.saveInterval = setInterval(() => {
-            Persistence.savePlayers(this.players, this.playersStorageKey);
-            Persistence.saveMap(this.map, this.mapStorageKey);
+        this.saveInterval = setInterval(async () => {
+            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
         }, 5000); // Save every 5 seconds
     }
 
@@ -247,11 +269,12 @@ export class Game {
         }
 
         player.addEnergy();
-        console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energy.timestamps.length}, Current Position: (${player.pixelX.toFixed(2)}, ${player.pixelY.toFixed(2)})`);
+        console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energy.timestamps.length}`);
     }
 
     start() {
-        this.map.loadAssets().then(() => {
+        this.map.loadAssets().then(async () => {
+            await this.init(); // Use the new async init
             this.lastTime = performance.now();
             this.gameLoop();
         });
@@ -309,6 +332,52 @@ export class Game {
         
         const { drawStartX, drawEndX, drawStartY, drawEndY } = this.getVisibleTileRange(cameraX, cameraY);
         this.map.renderBase(this.ctx, cameraX, cameraY, drawStartX, drawEndX, drawStartY, drawEndY);
+
+        // --- Render Target Highlights ---
+        if (this.settings.visuals && this.settings.visuals.show_target_indicator) {
+            this.ctx.save();
+            this.ctx.lineWidth = 2;
+            this.ctx.shadowBlur = 8;
+            
+            const alpha = (Math.sin(performance.now() / 250) + 1) / 2 * 0.6 + 0.4; // Pulsates between 0.4 and 1.0
+            
+            const woodcuttingStates = [PLAYER_STATE.MOVING_TO_TREE, PLAYER_STATE.CHOPPING];
+            const gatheringStates = [
+                PLAYER_STATE.MOVING_TO_LOGS,
+                PLAYER_STATE.HARVESTING_LOGS,
+                PLAYER_STATE.MOVING_TO_BUSHES,
+                PLAYER_STATE.HARVESTING_BUSHES
+            ];
+
+            for (const player of this.players.values()) {
+                let indicatorColor = null;
+
+                if (woodcuttingStates.includes(player.state)) {
+                    this.ctx.shadowColor = 'rgba(255, 255, 100, 0.8)';
+                    indicatorColor = `rgba(255, 255, 100, ${alpha})`;
+                } else if (gatheringStates.includes(player.state)) {
+                    this.ctx.shadowColor = 'rgba(100, 220, 255, 0.8)';
+                    indicatorColor = `rgba(100, 220, 255, ${alpha})`;
+                }
+                
+                if (indicatorColor && player.actionTarget) {
+                    const targetX = player.actionTarget.x;
+                    const targetY = player.actionTarget.y;
+
+                    const screenX = Math.round(targetX * tileSize - cameraX);
+                    const screenY = Math.round(targetY * tileSize - cameraY);
+                    
+                    // Check if the tile is on screen before drawing
+                    if (screenX + tileSize > 0 && screenX < this.canvas.width &&
+                        screenY + tileSize > 0 && screenY < this.canvas.height) {
+
+                        this.ctx.strokeStyle = indicatorColor;
+                        this.ctx.strokeRect(screenX + 1, screenY + 1, tileSize - 2, tileSize - 2);
+                    }
+                }
+            }
+            this.ctx.restore();
+        }
 
         // --- Y-Sorting Render Logic ---
         const renderList = [];

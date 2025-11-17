@@ -3,15 +3,22 @@ import { TILE_TYPE } from '../map-tile-types.js';
 import { findPath } from '../pathfinding.js';
 import { startChoppingCycle } from './chopping.js';
 
-export function startGatheringCycle(player, gameMap) {
+export function startGatheringCycle(player, gameMap, searchCenter = null, searchRadius = null) {
     player.state = PLAYER_STATE.SEARCHING_FOR_GATHERABLE;
     console.log(`[${player.username}] Starting gathering cycle, searching for resources.`);
 
     const gatherableTypes = [TILE_TYPE.LOGS, TILE_TYPE.BUSHES];
-    const allGatherables = gameMap.findAll(gatherableTypes);
+    
+    let allGatherables;
+    if (searchCenter && searchRadius) {
+        console.log(`[${player.username}] Performing a localized gather search around (${searchCenter.pixelX.toFixed(1)}, ${searchCenter.pixelY.toFixed(1)}) with radius ${searchRadius}.`);
+        allGatherables = gameMap.findAllInRadius(searchCenter.pixelX, searchCenter.pixelY, gatherableTypes, searchRadius);
+    } else {
+        allGatherables = gameMap.findAll(gatherableTypes);
+    }
 
     if (allGatherables.length === 0) {
-        console.log(`[${player.username}] No gatherables found on the map. Wandering...`);
+        console.log(`[${player.username}] No gatherables found in search area. Wandering...`);
         player.state = PLAYER_STATE.WANDERING_TO_GATHER;
         player.lastSearchPosition = { x: player.pixelX, y: player.pixelY };
         return;
@@ -80,9 +87,9 @@ export function finishHarvestingLogs(player, gameMap, game) {
     const max = game.settings.gathering.harvest_logs_max_yield;
     const numLogs = Math.floor(Math.random() * (max - min + 1)) + min;
     for (let i = 0; i < numLogs; i++) {
-        player.inventory.logs.push({ timestamp: Date.now() });
+        player.inventory.addLog(Date.now());
     }
-    console.log(`[${player.username}] Harvested ${numLogs} logs. Total: ${player.inventory.logs.length}. Timestamp: ${Date.now()}`);
+    console.log(`[${player.username}] Harvested ${numLogs} logs. Total: ${player.inventory.getLogCount()}. Timestamp: ${Date.now()}`);
     player.addExperience('woodcutting', numLogs * game.settings.woodcutting.harvest_logs_xp_per_log);
     player.addExperience('gathering', game.settings.gathering.harvest_logs_xp);
     gameMap.grid[player.actionTarget.y][player.actionTarget.x] = TILE_TYPE.GRASS;
@@ -141,8 +148,8 @@ export function finishHarvestingBushes(player, gameMap, game) {
     const min = game.settings.gathering.harvest_bushes_min_yield;
     const max = game.settings.gathering.harvest_bushes_max_yield;
     const numLeaves = Math.floor(Math.random() * (max - min + 1)) + min;
-    player.inventory.leaves.push({ amount: numLeaves, timestamp: Date.now() });
-    const totalLeaves = player.inventory.leaves.reduce((sum, item) => sum + item.amount, 0);
+    player.inventory.addLeaves(numLeaves, Date.now());
+    const totalLeaves = player.inventory.getTotalLeaves();
     console.log(`[${player.username}] Harvested ${numLeaves} leaves. Total: ${totalLeaves}. Timestamp: ${Date.now()}`);
     player.addExperience('gathering', game.settings.gathering.harvest_bushes_xp);
     gameMap.grid[player.actionTarget.y][player.actionTarget.x] = TILE_TYPE.GRASS;

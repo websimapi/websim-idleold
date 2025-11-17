@@ -1,4 +1,7 @@
 import { findWorldsForChannel, populateWorldList } from './world-list.js';
+import * as StorageManager from '../storage-manager.js';
+import * as idb from '../idb-helper.js';
+import { format } from '../data-format.js';
 
 const PLAYERS_STORAGE_PREFIX = 'twitch_game_players_';
 const MAP_STORAGE_PREFIX = 'twitch_game_map_';
@@ -18,6 +21,7 @@ function findAvailableWorldName(baseName, existingWorlds) {
     }
 }
 
+/*
 function saveImportedWorld(channel, worldName, data) {
     const playerDataKey = `${PLAYERS_STORAGE_PREFIX}${channel}_${worldName}`;
     const mapDataKey = `${MAP_STORAGE_PREFIX}${channel}_${worldName}`;
@@ -32,8 +36,38 @@ function saveImportedWorld(channel, worldName, data) {
         console.error('Error saving imported world:', e);
     }
 }
+*/
 
-function processImportedWorld(worldData) {
+async function saveImportedWorld(channel, worldName, data, dataFormat) {
+    let playersToSave = data.players || {};
+
+    // If format is verbose (or old format without a format key), compact it.
+    if (dataFormat !== 'compact') {
+        console.log("Imported world is in verbose or legacy format, compacting player data...");
+        const compactedPlayers = {};
+        for (const id in playersToSave) {
+            compactedPlayers[id] = format.compactPlayerData(playersToSave[id]);
+        }
+        playersToSave = compactedPlayers;
+    }
+
+    const worldKey = `${channel}/${worldName}`;
+    const worldState = {
+        players: playersToSave,
+        map: data.map || {}
+    };
+
+    try {
+        await idb.set('worlds', worldKey, worldState);
+        console.log(`Successfully imported and saved world "${worldName}" for channel "${channel}".`);
+        alert(`Successfully imported world: ${worldName}`);
+    } catch (e) {
+        alert('An error occurred while saving the imported world data to IndexedDB.');
+        console.error('Error saving imported world:', e);
+    }
+}
+
+async function processImportedWorld(worldData) {
     if (!worldData.worldName || !worldData.data || !worldData.data.players || !worldData.data.map) {
         alert('Invalid world file format.');
         return;
@@ -52,24 +86,24 @@ function processImportedWorld(worldData) {
         }
     }
 
-    const existingWorlds = findWorldsForChannel(channel);
+    const existingWorlds = await findWorldsForChannel(channel);
 
     if (existingWorlds.includes(importedWorldName)) {
-        const choice = prompt(`A world named \"${importedWorldName}\" already exists.\n\nType 'overwrite' to replace it.\nType 'copy' to save it as a new world.\n\nAnything else will cancel.`, 'copy');
+        const choice = prompt(`A world named "${importedWorldName}" already exists.\n\nType 'overwrite' to replace it.\nType 'copy' to save it as a new world.\n\nAnything else will cancel.`, 'copy');
 
         if (choice && choice.toLowerCase() === 'overwrite') {
             // Name remains the same, will overwrite existing data.
         } else if (choice && choice.toLowerCase() === 'copy') {
             importedWorldName = findAvailableWorldName(importedWorldName, existingWorlds);
-            alert(`The world will be imported as \"${importedWorldName}\".`);
+            alert(`The world will be imported as "${importedWorldName}".`);
         } else {
             alert('Import cancelled.');
             return; // User cancelled or entered invalid input
         }
     }
 
-    saveImportedWorld(channel, importedWorldName, worldData.data);
-    populateWorldList(channel);
+    await saveImportedWorld(channel, importedWorldName, worldData.data, worldData.format);
+    await populateWorldList(channel);
 }
 
 export function handleWorldImport() {
@@ -101,36 +135,6 @@ export function handleWorldImport() {
 }
 
 export function exportWorldData(channel, worldName) {
-    const playerDataKey = worldName === 'default' 
-        ? `${PLAYERS_STORAGE_PREFIX}${channel}` 
-        : `${PLAYERS_STORAGE_PREFIX}${channel}_${worldName}`;
-
-    const mapDataKey = worldName === 'default' 
-        ? `${MAP_STORAGE_PREFIX}${channel}` 
-        : `${MAP_STORAGE_PREFIX}${channel}_${worldName}`;
-
-    const players = JSON.parse(localStorage.getItem(playerDataKey) || '{}');
-    const map = JSON.parse(localStorage.getItem(mapDataKey) || '{}');
-
-    const worldData = {
-        channel,
-        worldName,
-        timestamp: new Date().toISOString(),
-        data: {
-            players,
-            map
-        }
-    };
-
-    const dataStr = JSON.stringify(worldData, null, 2);
-    const dataBlob = new Blob([dataStr], {type: "application/json"});
-    const url = URL.createObjectURL(dataBlob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${channel}_${worldName}_backup.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const useVerbose = confirm("Export in verbose (human-readable) format? Cancel for compact format.");
+    StorageManager.exportWorldData(channel, worldName, useVerbose);
 }

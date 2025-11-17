@@ -3,6 +3,7 @@ import { loadSettings, saveSettings } from '../game-settings.js';
 import * as DOM from './dom-elements.js';
 import { findWorldsForChannel, populateWorldList } from './world-list.js';
 import { showGame } from '../ui-manager.js';
+import * as StorageManager from '../storage-manager.js';
 
 function showDeleteConfirmation(onConfirm) {
     const overlay = document.createElement('div');
@@ -75,6 +76,18 @@ export function showWorldSettings(channel, worldName) {
                     </div>
                     <ul id="admin-list"></ul>
                 </div>
+                 <div class="settings-section">
+                    <label>Storage System</label>
+                    <p class="setting-desc">The game now uses IndexedDB for better performance and capacity.</p>
+                    <div id="storage-info">Loading...</div>
+                </div>
+                <div class="settings-section">
+                    <label>Visuals</label>
+                    <div class="setting-item">
+                        <input type="checkbox" id="show_target_indicator" data-path="visuals.show_target_indicator" ${settings.visuals && settings.visuals.show_target_indicator ? 'checked' : ''}>
+                        <label for="show_target_indicator">Show Target Tile Indicator</label>
+                    </div>
+                </div>
             </div>
             <div class="settings-column">
                 <div class="settings-section">
@@ -115,6 +128,22 @@ export function showWorldSettings(channel, worldName) {
 
     const worldNameInputEl = document.getElementById('world-name-input');
 
+    async function updateStorageInfo() {
+        const storageInfoEl = document.getElementById('storage-info');
+        if (navigator.storage && navigator.storage.estimate) {
+            const estimate = await navigator.storage.estimate();
+            const usage = (estimate.usage / 1024 / 1024).toFixed(2);
+            const quota = (estimate.quota / 1024 / 1024).toFixed(2);
+            storageInfoEl.innerHTML = `
+                <p style="margin: 0; font-size: 14px;">
+                    Using <strong>IndexedDB</strong>: ${usage} MB / ${quota} MB
+                </p>`;
+        } else {
+            storageInfoEl.textContent = 'Storage estimation is not available in this browser.';
+        }
+    }
+    updateStorageInfo();
+
     function handleRename() {
         const newWorldName = worldNameInputEl.value.trim();
         if (newWorldName && newWorldName !== currentWorldName) {
@@ -125,51 +154,12 @@ export function showWorldSettings(channel, worldName) {
                 return false;
             }
 
-            const oldKeys = Persistence.getStorageKeys(channel, currentWorldName);
-            const newKeys = Persistence.getStorageKeys(channel, newWorldName);
-
-            const playerData = localStorage.getItem(oldKeys.playersStorageKey);
-            if (playerData) {
-                localStorage.setItem(newKeys.playersStorageKey, playerData);
-                localStorage.removeItem(oldKeys.playersStorageKey);
-            }
-
-            const mapData = localStorage.getItem(oldKeys.mapStorageKey);
-            if (mapData) {
-                localStorage.setItem(newKeys.mapStorageKey, mapData);
-                localStorage.removeItem(oldKeys.mapStorageKey);
-            }
-
-            const hostsData = localStorage.getItem(oldKeys.hostsStorageKey);
-            if (hostsData) {
-                localStorage.setItem(newKeys.hostsStorageKey, hostsData);
-                localStorage.removeItem(oldKeys.hostsStorageKey);
-            }
-
-            const oldSettingsKey = `twitch_game_settings_${channel}_${currentWorldName}`;
-            const newSettingsKey = `twitch_game_settings_${channel}_${newWorldName}`;
-            const settingsData = localStorage.getItem(oldSettingsKey);
-            if(settingsData) {
-                localStorage.setItem(newSettingsKey, settingsData);
-                localStorage.removeItem(oldSettingsKey);
-            }
-
-            console.log(`World \\\"${currentWorldName}\\\" renamed to \\\"${newWorldName}\\\".`);
-            currentWorldName = newWorldName; // Update internal state
-            populateWorldList(channel); // Refresh list
-
-            // Re-select the newly named world
-            setTimeout(() => {
-                const worldItems = document.querySelectorAll('.world-item');
-                const newWorldEl = Array.from(worldItems).find(el => {
-                    const h3 = el.querySelector('h3');
-                    return h3 && h3.textContent === newWorldName;
-                });
-                if (newWorldEl) {
-                    newWorldEl.classList.add('selected');
-                }
-            }, 0);
-            return true;
+            // Renaming logic needs to be updated for IndexedDB
+            console.warn("World renaming with IndexedDB not fully implemented yet.");
+            // For now, prevent renaming to avoid data loss.
+             alert("Renaming worlds is temporarily disabled during storage transition.");
+             worldNameInputEl.value = currentWorldName;
+             return false;
         }
         return false;
     }
@@ -193,8 +183,10 @@ export function showWorldSettings(channel, worldName) {
         }
     });
 
-    const { hostsStorageKey } = Persistence.getStorageKeys(channel, currentWorldName);
-    let hosts = Persistence.loadHosts(hostsStorageKey);
+    // Admin/Host logic remains the same, but it will need to be migrated too.
+    // Let's assume for now it's still in localStorage until fully migrated.
+    const hostsStorageKey = `twitch_game_hosts_${channel}_${currentWorldName}`;
+    let hosts = JSON.parse(localStorage.getItem(hostsStorageKey) || '[]');
 
     const adminListEl = document.getElementById('admin-list');
     const adminInputEl = document.getElementById('admin-input');
@@ -212,7 +204,7 @@ export function showWorldSettings(channel, worldName) {
             removeBtn.innerHTML = '&times;';
             removeBtn.onclick = () => {
                 hosts = hosts.filter(h => h !== host);
-                Persistence.saveHosts(hosts, Persistence.getStorageKeys(channel, currentWorldName).hostsStorageKey);
+                localStorage.setItem(hostsStorageKey, JSON.stringify(hosts));
                 renderAdmins();
             };
             li.appendChild(removeBtn);
@@ -224,7 +216,7 @@ export function showWorldSettings(channel, worldName) {
         const newAdmin = adminInputEl.value.trim().toLowerCase();
         if (newAdmin && !hosts.includes(newAdmin)) {
             hosts.push(newAdmin);
-            Persistence.saveHosts(hosts, Persistence.getStorageKeys(channel, currentWorldName).hostsStorageKey);
+            localStorage.setItem(hostsStorageKey, JSON.stringify(hosts));
             renderAdmins();
             adminInputEl.value = '';
         }
@@ -255,6 +247,21 @@ export function showWorldSettings(channel, worldName) {
         });
     });
 
+    DOM.worldSettingsContainer.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+            const path = input.dataset.path.split('.');
+            let current = settings;
+            for (let i = 0; i < path.length - 1; i++) {
+                if (!current[path[i]]) {
+                    current[path[i]] = {};
+                }
+                current = current[path[i]];
+            }
+            current[path[path.length - 1]] = input.checked;
+            saveSettings(channel, currentWorldName, settings);
+        });
+    });
+
     // --- Delete World Logic ---
     const deleteWorldInput = document.getElementById('delete-world-input');
     const deleteWorldBtn = document.getElementById('delete-world-btn');
@@ -270,12 +277,14 @@ export function showWorldSettings(channel, worldName) {
     deleteWorldBtn.addEventListener('click', () => {
         if (deleteWorldBtn.disabled) return;
 
-        showDeleteConfirmation(() => {
+        showDeleteConfirmation(async () => {
             console.log(`Deleting world: ${currentWorldName}`);
-            const keys = Persistence.getStorageKeys(channel, currentWorldName);
-            localStorage.removeItem(keys.playersStorageKey);
-            localStorage.removeItem(keys.mapStorageKey);
-            localStorage.removeItem(keys.hostsStorageKey);
+            // This also needs to be updated for IDB.
+            await StorageManager.deleteWorld(channel, currentWorldName);
+
+            // Also remove settings and hosts from localStorage
+            localStorage.removeItem(`twitch_game_settings_${channel}_${currentWorldName}`);
+            localStorage.removeItem(`twitch_game_hosts_${channel}_${currentWorldName}`);
 
             DOM.worldSettingsContainer.classList.add('hidden');
             populateWorldList(channel);

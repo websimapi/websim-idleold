@@ -58,22 +58,74 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
     if (dist > 0.01) {
         const moveAmount = player.speed * deltaTime;
         
-        const nextPixelX = player.pixelX + (dx / dist) * moveAmount;
-        const nextPixelY = player.pixelY + (dy / dist) * moveAmount;
-        
-        const nextGridX = Math.round(nextPixelX);
-        const nextGridY = Math.round(nextPixelY);
-        
-        if (!gameMap.isColliding(nextGridX, nextGridY) || (nextGridX === player.targetX && nextGridY === player.targetY)) {
+        const moveX = (dx / dist) * moveAmount;
+        const moveY = (dy / dist) * moveAmount;
+
+        const nextPixelX = player.pixelX + moveX;
+        const nextPixelY = player.pixelY + moveY;
+
+        if (!gameMap.isPixelColliding(nextPixelX, nextPixelY)) {
             player.pixelX = nextPixelX;
             player.pixelY = nextPixelY;
         } else {
-            player.pixelX = Math.round(player.pixelX); // Snap to grid
-            player.pixelY = Math.round(player.pixelY);
+            // If full move is blocked, try moving only on one axis
+            if (!gameMap.isPixelColliding(nextPixelX, player.pixelY)) {
+                player.pixelX = nextPixelX;
+            } else if (!gameMap.isPixelColliding(player.pixelX, nextPixelY)) {
+                player.pixelY = nextPixelY;
+            }
         }
     } else {
         player.pixelX = player.targetX;
         player.pixelY = player.targetY;
+    }
+}
+
+export function applySeparation(player, allPlayers, gameMap) {
+    const separationRadius = (1 / 2.5) * 2; // Player diameter in grid units
+    const separationForce = 0.005; // A small push force to avoid being too jerky
+    let totalPushX = 0;
+    let totalPushY = 0;
+    let neighbors = 0;
+
+    for (const otherPlayer of allPlayers.values()) {
+        if (otherPlayer.id === player.id) continue;
+
+        const dx = player.pixelX - otherPlayer.pixelX;
+        const dy = player.pixelY - otherPlayer.pixelY;
+        const distanceSq = dx * dx + dy * dy;
+
+        // Only consider players that are actually overlapping or very close
+        if (distanceSq > 0 && distanceSq < separationRadius * separationRadius) {
+            const distance = Math.sqrt(distanceSq);
+            // The closer the players, the stronger the push
+            const pushFactor = (separationRadius - distance) / separationRadius;
+            totalPushX += (dx / distance) * pushFactor;
+            totalPushY += (dy / distance) * pushFactor;
+            neighbors++;
+        }
+    }
+
+    if (neighbors > 0) {
+        // Average the push vector and apply the force
+        const avgPushX = (totalPushX / neighbors) * separationForce;
+        const avgPushY = (totalPushY / neighbors) * separationForce;
+
+        const newPixelX = player.pixelX + avgPushX;
+        const newPixelY = player.pixelY + avgPushY;
+
+        // Check against map collision before applying the separation push
+        if (!gameMap.isPixelColliding(newPixelX, newPixelY)) {
+            player.pixelX = newPixelX;
+            player.pixelY = newPixelY;
+        } else {
+            // If pushing into a wall, try pushing only along one valid axis
+            if (!gameMap.isPixelColliding(newPixelX, player.pixelY)) {
+                player.pixelX = newPixelX;
+            } else if (!gameMap.isPixelColliding(player.pixelX, newPixelY)) {
+                player.pixelY = newPixelY;
+            }
+        }
     }
 }
 

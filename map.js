@@ -119,8 +119,27 @@ export class Map {
             return true; 
         }
         
-        // 1 means Tree/Obstacle
+        // 1 means Tree/Obstacle. For pathfinding, the whole tile is an obstacle.
         return this.grid[gridY][gridX] === TILE_TYPE.TREE;
+    }
+
+    isPixelColliding(pixelX, pixelY) {
+        const gridX = Math.floor(pixelX);
+        const gridY = Math.floor(pixelY);
+        const tileYOffset = pixelY - gridY;
+    
+        if (gridX < 0 || gridX >= this.width || gridY < 0 || gridY >= this.height) {
+            return true;
+        }
+    
+        const tileType = this.grid[gridY][gridX];
+    
+        if (tileType === TILE_TYPE.TREE) {
+            // Collision only on the bottom 40% of the tile (the trunk)
+            return tileYOffset > 0.6;
+        }
+    
+        return false; // Only trees have special collision for now
     }
 
     findAll(tileTypes) {
@@ -131,6 +150,31 @@ export class Map {
                 const tileType = this.grid[j][i];
                 if (tileTypes.includes(tileType)) {
                     locations.push({ x: i, y: j, type: tileType });
+                }
+            }
+        }
+        return locations;
+    }
+
+    findAllInRadius(x, y, tileTypes, radius) {
+        if (!Array.isArray(tileTypes)) tileTypes = [tileTypes];
+        const locations = [];
+
+        const startX = Math.max(0, Math.floor(x - radius));
+        const endX = Math.min(this.width - 1, Math.ceil(x + radius));
+        const startY = Math.max(0, Math.floor(y - radius));
+        const endY = Math.min(this.height - 1, Math.ceil(y + radius));
+        const radiusSq = radius * radius;
+
+        for (let j = startY; j <= endY; j++) {
+            for (let i = startX; i <= endX; i++) {
+                const tileType = this.grid[j][i];
+                if (tileTypes.includes(tileType)) {
+                    const dx = i - x;
+                    const dy = j - y;
+                    if (dx * dx + dy * dy <= radiusSq) {
+                        locations.push({ x: i, y: j, type: tileType });
+                    }
                 }
             }
         }
