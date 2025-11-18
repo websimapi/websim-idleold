@@ -161,9 +161,13 @@ function renderPathingLines(ctx, players, camera, map, settings) {
     ctx.setLineDash([5, 5]); // Dashed lines for paths
 
     const tileSize = map.tileSize;
+    
+    const isMovingState = (state) => {
+        return state.startsWith('moving_to') || state === PLAYER_STATE.FOLLOWING;
+    };
 
     for (const player of players.values()) {
-        if (!player.isPowered() || !player.path || player.path.length === 0) continue;
+        if (!player.isPowered() || !player.path || player.path.length === 0 || !isMovingState(player.state)) continue;
 
         const pathColor = player.color || '#FFFFFF';
         ctx.strokeStyle = pathColor;
