@@ -144,22 +144,6 @@ export class Game {
         }, 5 * 60 * 1000);
     }
 
-    sendInventoryUpdate(player) {
-        if (!this.room || !player || !this.linkedPlayers.has(player.id)) return;
-        
-        const clientId = this.linkedPlayers.get(player.id);
-        const inventoryData = {
-            logs: player.inventory.getLogCount(),
-            leaves: player.inventory.getTotalLeaves()
-        };
-        
-        this.room.send({
-            type: 'inventory_update',
-            forClientId: clientId,
-            inventory: inventoryData
-        });
-    }
-
     sendLiveViewUpdate(player) {
         if (!this.room || !player || !this.linkedPlayers.has(player.id)) return;
 
@@ -282,7 +266,7 @@ export class Game {
                     username: player.username
                 });
                 
-                this.sendInventoryUpdate(player);
+                this.sendLiveViewUpdate(player);
             } else {
                 console.log(`[${player.username}] tried to use invalid or non-existent code "${code}".`);
             }

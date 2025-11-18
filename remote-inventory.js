@@ -163,8 +163,10 @@ export async function initRemoteInventory() {
             if (data.type === 'pairing_code') {
                 renderUI(STATUS.RECEIVED_CODE, { code: data.code });
             } else if (data.type === 'link_success') {
-                isLinked = true;
-                renderUI(STATUS.LINKED, { username: data.username });
+                if (!isLinked) {
+                    isLinked = true;
+                    renderUI(STATUS.LINKED, { username: data.username });
+                }
             } else if (data.type === 'live_view_update') {
                 if (!isLinked) { // First inventory update also confirms a successful link
                     isLinked = true;
