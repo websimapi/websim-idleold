@@ -67,8 +67,7 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         let proposedY = player.pixelY + moveY;
 
         // Store current position to detect if movement is blocked
-        player.prevPixelX = player.pixelX;
-        player.prevPixelY = player.pixelY;
+        // This is now handled in Player.update()
         
         const originalHitbox = getPlayerHitbox(player);
 
@@ -90,6 +89,28 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         player.pixelY = player.targetY;
     }
 }
+
+export function applyWiggle(player, gameMap) {
+    const wiggleAmount = 0.05; // A smaller, more subtle nudge
+    const wiggleAngle = Math.random() * 2 * Math.PI;
+
+    const proposedX = player.pixelX + Math.cos(wiggleAngle) * wiggleAmount;
+    const proposedY = player.pixelY + Math.sin(wiggleAngle) * wiggleAmount;
+
+    // Use a temporary player object for hitbox calculation to avoid mutating the real player
+    const hitbox = getPlayerHitbox({ ...player, pixelX: proposedX, pixelY: proposedY });
+
+    if (!checkWorldCollision(hitbox, gameMap)) {
+        player.pixelX = proposedX;
+        player.pixelY = proposedY;
+        // console.log(`[${player.username}] wiggled out of a stuck spot.`);
+    }
+
+    // Reset timer completely to prevent constant wiggling.
+    // The main update loop will restart the timer if the player remains stuck.
+    player.stuckTimer = 0;
+}
+
 
 export function applySeparation(player, allPlayers, gameMap) {
     const separationRadius = (1 / 2.5) * 2; // Player diameter in grid units

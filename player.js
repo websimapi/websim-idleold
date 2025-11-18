@@ -9,7 +9,7 @@ import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './beh
 import { PlayerEnergy } from './player-energy.js';
 import { PlayerInventory } from './player-inventory.js';
 import { PlayerSkills } from './player-skills.js';
-import { applySeparation } from './player-movement.js';
+import { applySeparation, applyWiggle } from './player-movement.js';
 
 export const ENERGY_DURATION_MS = 3600 * 1000; // This will now be controlled by settings
 
@@ -67,6 +67,7 @@ export class Player {
         this.path = []; // Path for A* movement
         this.prevPixelX = 0; // For stuck detection
         this.prevPixelY = 0; // For stuck detection
+        this.stuckTimer = 0; // For wiggle logic
 
         // For collision avoidance
         const angle = Math.random() * 2 * Math.PI;
@@ -216,6 +217,7 @@ export class Player {
         this.state = state.state || PLAYER_STATE.IDLE;
         this.actionTimer = state.actionTimer || 0;
         this.actionTotalTime = state.actionTotalTime || 0;
+        this.stuckTimer = 0; // Don't load stuck state
         
         // If restoring a chopping state, ensure the action target is valid.
         if (this.state === PLAYER_STATE.CHOPPING && !this.actionTarget) {
@@ -306,6 +308,10 @@ export class Player {
     }
 
     update(deltaTime, gameMap, allPlayers, game) {
+        // Store previous position for stuck detection
+        this.prevPixelX = this.pixelX;
+        this.prevPixelY = this.pixelY;
+
         // Apply separation from other players to prevent overlap
         applySeparation(this, allPlayers, gameMap);
         
@@ -315,6 +321,7 @@ export class Player {
             // If energy just ran out
             if (!hadPower) {
                 this.state = PLAYER_STATE.IDLE; // Stop chopping if power runs out
+                this.stuckTimer = 0;
                 return; 
             }
 
@@ -332,6 +339,22 @@ export class Player {
             // State Machine for actions
             updateAction(this, deltaTime, gameMap, allPlayers, game);
 
+            // Stuck detection and wiggle
+            const isTryingToMove = this.state.startsWith('moving_to') || this.state === PLAYER_STATE.FOLLOWING || (this.state === PLAYER_STATE.IDLE && (this.targetX !== this.pixelX || this.targetY !== this.pixelY));
+            const distanceMoved = Math.sqrt((this.pixelX - this.prevPixelX)**2 + (this.pixelY - this.prevPixelY)**2);
+            
+            if (isTryingToMove && distanceMoved < 0.02 * deltaTime * 60) { // Threshold scaled by nominal 60fps
+                this.stuckTimer += deltaTime;
+            } else {
+                this.stuckTimer = 0;
+            }
+            
+            if (this.stuckTimer > 0.8) { // Increased threshold to make it less frequent
+                applyWiggle(this, gameMap);
+            }
+
+        } else {
+            this.stuckTimer = 0;
         }
     }
 
