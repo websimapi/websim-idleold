@@ -245,30 +245,29 @@ function renderHitboxes(ctx, players, map, camera, settings) {
 
     const tileSize = map.tileSize;
 
+    // Transform context to map coordinates relative to camera
+    const snappedCameraX = Math.round(camera.x);
+    const snappedCameraY = Math.round(camera.y);
+    ctx.translate(-snappedCameraX, -snappedCameraY);
+
+    if (viewMode === '2.5d') {
+        // Apply isometric ground transform: maps flat grid coordinates to isometric screen coordinates
+        // This squashes and rotates the coordinate system so drawing a circle results in a floor-aligned ellipse
+        ctx.transform(0.5, 0.25, -0.5, 0.25, 0, 0);
+    }
+
     // --- Player hitboxes ---
     for (const player of players.values()) {
         if (!player.isPowered()) continue;
-        const hitbox = getPlayerHitbox(player); // x, y are center
-        const pos = project(hitbox.x, hitbox.y, 0, viewMode, tileSize);
-        
-        let screenX = pos.x - camera.x;
-        let screenY = pos.y - camera.y;
+        const hitbox = getPlayerHitbox(player);
 
-        // In 2.5D, the rendered player circle is slightly lifted; adjust the hitbox upward
-        // by 1/4 of its height (i.e., half the radius) to better wrap the player sprite.
-        if (viewMode === '2.5d') {
-            screenY -= hitbox.radius * tileSize * 0.5;
-        }
-
-        // Hitbox is a circle in 2D. In 2.5D it should technically be an ellipse on the ground.
-        // For debug visuals, a circle at projected point is fine.
-        
         ctx.beginPath();
-        ctx.arc(screenX, screenY, hitbox.radius * tileSize, 0, Math.PI * 2);
+        // Draw circle in flat coordinates; transform handles the view projection
+        ctx.arc(hitbox.x * tileSize, hitbox.y * tileSize, hitbox.radius * tileSize, 0, Math.PI * 2);
         ctx.stroke();
     }
 
-    // --- Tree hitboxes (rounded) ---
+    // --- Tree hitboxes (rectangles) ---
     // Compute visible tile range so we only iterate trees that can be on screen
     const { drawStartX, drawEndX, drawStartY, drawEndY } = getVisibleTileRange(
         camera,
@@ -283,27 +282,14 @@ function renderHitboxes(ctx, players, map, camera, settings) {
             if (map.grid[j][i] !== TILE_TYPE.TREE) continue;
 
             const trunk = getTreeTrunkHitbox(i, j);
-
-            // Center the hitbox circle in the middle of the tile for both 2D and 2.5D
-            const centerX = i + 0.5;
-            const centerY = j + 0.5;
-
-            const pos = project(centerX, centerY, 0, viewMode, tileSize);
-            const screenX = pos.x - camera.x;
-            const screenY = pos.y - camera.y;
-
-            // Radius based on trunk size in tile units, scaled to pixels
-            // Halved to make the tree hitbox circle 1/2 the previous size
-            const radius = (Math.max(trunk.width, trunk.height) * tileSize) / 4;
-
+            
             ctx.beginPath();
-            ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+            // Draw circle in flat coordinates; transform handles the view projection
+            ctx.arc(trunk.x * tileSize, trunk.y * tileSize, trunk.radius * tileSize, 0, Math.PI * 2);
             ctx.stroke();
         }
     }
 
-    // Tree hitboxes
-    // ... (Simplified for brevity: only drawing if 2D or basic rect for 2.5D debug)
     ctx.restore();
 }
 
