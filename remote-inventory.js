@@ -61,7 +61,7 @@ function renderUI(state, data = {}) {
             break;
         case STATUS.LINKED:
             content = `
-                <h2>${data.username}'s Inventory</h2>
+                <h2>${data.username}'s Inventory & Skills</h2>
                 <div class="inventory-display">
                     <div class="inventory-item">
                         <span class="label">🪵 Logs:</span>
@@ -70,6 +70,14 @@ function renderUI(state, data = {}) {
                     <div class="inventory-item">
                         <span class="label">🌿 Leaves:</span>
                         <span class="value" id="leaves-count">--</span>
+                    </div>
+                    <div class="inventory-item">
+                        <span class="label">🪓 Woodcutting XP:</span>
+                        <span class="value" id="woodcutting-xp">--</span>
+                    </div>
+                    <div class="inventory-item">
+                        <span class="label">🧤 Gathering XP:</span>
+                        <span class="value" id="gathering-xp">--</span>
                     </div>
                 </div>
                 <p><small>Your inventory will update automatically.</small></p>
@@ -91,12 +99,28 @@ function renderUI(state, data = {}) {
     contentContainer.innerHTML = content;
 }
 
-function updateInventoryDisplay(inventory) {
+function updateInventoryDisplay(payload) {
+    const { inventory, playerState } = payload;
     const logsEl = document.getElementById('logs-count');
     const leavesEl = document.getElementById('leaves-count');
     if (logsEl && leavesEl) {
         logsEl.textContent = inventory.logs.toLocaleString();
         leavesEl.textContent = inventory.leaves.toLocaleString();
+    }
+
+    if (playerState && playerState.skills) {
+        const woodcuttingXpEl = document.getElementById('woodcutting-xp');
+        const gatheringXpEl = document.getElementById('gathering-xp');
+
+        if (woodcuttingXpEl) {
+            const totalWcExp = Object.values(playerState.skills.woodcutting || {}).reduce((sum, amount) => sum + amount, 0);
+            woodcuttingXpEl.textContent = totalWcExp.toLocaleString();
+        }
+
+        if (gatheringXpEl) {
+            const totalGathExp = Object.values(playerState.skills.gathering || {}).reduce((sum, amount) => sum + amount, 0);
+            gatheringXpEl.textContent = totalGathExp.toLocaleString();
+        }
     }
 }
 
@@ -172,7 +196,7 @@ export async function initRemoteInventory() {
                     isLinked = true;
                     renderUI(STATUS.LINKED, { username: data.payload.playerState.username || 'Your' });
                 }
-                updateInventoryDisplay(data.payload.inventory);
+                updateInventoryDisplay(data.payload);
                 if (liveViewRenderer) {
                     liveViewRenderer.updateState(data.payload);
                 }
