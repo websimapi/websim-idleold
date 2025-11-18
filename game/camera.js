@@ -168,24 +168,43 @@ export class Camera {
     switchToNextPlayerFocus() {
         const activePlayers = Array.from(this.players.values()).filter(p => p.isPowered());
 
-        if (activePlayers.length < 2) {
-            console.log("Not enough active players to switch focus.");
+        if (activePlayers.length === 0) {
+            console.log("No active players to focus on.");
             return;
         }
 
+        // Always sort to get deterministic order
         activePlayers.sort((a, b) => a.username.localeCompare(b.username));
+
+        // If there is only one active player, always focus them
+        if (activePlayers.length === 1) {
+            const onlyPlayer = activePlayers[0];
+            if (this.focusedPlayerId !== onlyPlayer.id) {
+                this.setFocus(onlyPlayer.id);
+            } else {
+                // Already focused on the only player, just reset the focus timer
+                this.focusTimer = this.FOCUS_DURATION;
+            }
+            return;
+        }
 
         let currentIndex = -1;
         if (this.focusedPlayerId) {
             currentIndex = activePlayers.findIndex(p => p.id === this.focusedPlayerId);
         }
 
+        // If no current focus or focused player is no longer active, start from first
+        if (currentIndex === -1) {
+            const nextPlayer = activePlayers[0];
+            this.setFocus(nextPlayer.id);
+            return;
+        }
+
         const nextIndex = (currentIndex + 1) % activePlayers.length;
         const nextPlayer = activePlayers[nextIndex];
 
         if (nextPlayer) {
-            this.focusedPlayerId = nextPlayer.id;
-            this.focusTimer = this.FOCUS_DURATION;
+            this.setFocus(nextPlayer.id);
             console.log(`Camera focus switched to: ${nextPlayer.username}`);
         }
     }

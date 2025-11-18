@@ -150,9 +150,9 @@ export class Game {
         player.addEnergy();
         console.log(`Player ${player.username} gained energy. Current energy cells: ${player.energy.timestamps.length}`);
 
-        // If a player who was not active just gained energy, and the camera is idle, focus on them.
-        if (!wasPoweredBefore && player.isPowered() && !this.camera.focusedPlayerId) {
-            console.log(`Camera was idle, now focusing on newly active player: ${player.username}`);
+        // If a player who was not active just gained energy, focus the camera on them.
+        if (!wasPoweredBefore && player.isPowered()) {
+            console.log(`Focusing camera on newly powered player: ${player.username}`);
             this.camera.setFocus(player.id);
         }
     }
