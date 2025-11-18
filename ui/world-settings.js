@@ -4,6 +4,7 @@ import * as DOM from './dom-elements.js';
 import { findWorldsForChannel, populateWorldList } from './world-list.js';
 import { showGame } from '../ui-manager.js';
 import * as StorageManager from '../storage-manager.js';
+import { regenerateMapFeature } from '../map.js';
 
 function showDeleteConfirmation(onConfirm) {
     const overlay = document.createElement('div');
@@ -82,6 +83,14 @@ export function showWorldSettings(channel, worldName) {
                     <div id="storage-info">Loading...</div>
                 </div>
                 <div class="settings-section">
+                    <label>World Regeneration</label>
+                    <p class="setting-desc">Regenerate features on the map. Useful for updating old worlds. This cannot be undone.</p>
+                    <div class="regen-buttons">
+                        <button class="regen-btn" id="regenerate-trees-btn">Regenerate Trees</button>
+                        <button class="regen-btn" id="regenerate-flowers-btn">Regenerate Flowers</button>
+                    </div>
+                </div>
+                <div class="settings-section">
                     <label>Visuals</label>
                     <div class="setting-item">
                         <input type="checkbox" id="show_target_indicator" data-path="visuals.show_target_indicator" ${settings.visuals && settings.visuals.show_target_indicator ? 'checked' : ''}>
@@ -121,6 +130,11 @@ export function showWorldSettings(channel, worldName) {
                         <div class="rate-item"><label for="harvest_bushes_min_yield">Bush Min Yield</label><input type="number" id="harvest_bushes_min_yield" data-path="gathering.harvest_bushes_min_yield" value="${settings.gathering.harvest_bushes_min_yield}"></div>
                         <div class="rate-item"><label for="harvest_bushes_max_yield">Bush Max Yield</label><input type="number" id="harvest_bushes_max_yield" data-path="gathering.harvest_bushes_max_yield" value="${settings.gathering.harvest_bushes_max_yield}"></div>
                         <div class="rate-item"><label for="harvest_bushes_xp">Bush Harvest XP</label><input type="number" id="harvest_bushes_xp" data-path="gathering.harvest_bushes_xp" value="${settings.gathering.harvest_bushes_xp}"></div>
+                        <!-- Flowers -->
+                        <div class="rate-item"><label for="harvest_flowers_duration_seconds">Flower Harvest Time (s)</label><input type="number" id="harvest_flowers_duration_seconds" data-path="gathering.harvest_flowers_duration_seconds" value="${settings.gathering.harvest_flowers_duration_seconds}"></div>
+                        <div class="rate-item"><label for="harvest_flowers_min_yield">Flower Min Yield</label><input type="number" id="harvest_flowers_min_yield" data-path="gathering.harvest_flowers_min_yield" value="${settings.gathering.harvest_flowers_min_yield}"></div>
+                        <div class="rate-item"><label for="harvest_flowers_max_yield">Flower Max Yield</label><input type="number" id="harvest_flowers_max_yield" data-path="gathering.harvest_flowers_max_yield" value="${settings.gathering.harvest_flowers_max_yield}"></div>
+                        <div class="rate-item"><label for="harvest_flowers_xp_per_flower">Flower Harvest XP</label><input type="number" id="harvest_flowers_xp_per_flower" data-path="gathering.harvest_flowers_xp_per_flower" value="${settings.gathering.harvest_flowers_xp_per_flower}"></div>
                     </div>
                 </div>
             </div>
@@ -155,6 +169,19 @@ export function showWorldSettings(channel, worldName) {
         }
     }
     updateStorageInfo();
+
+    document.getElementById('regenerate-trees-btn').addEventListener('click', () => {
+        if (confirm(`Are you sure you want to regenerate all trees for "${currentWorldName}"?\n\nThis will remove all existing trees and spawn new ones. This action cannot be undone.`)) {
+            regenerateMapFeature(channel, currentWorldName, 'trees');
+        }
+    });
+
+    document.getElementById('regenerate-flowers-btn').addEventListener('click', () => {
+        if (confirm(`Are you sure you want to regenerate all flowers for "${currentWorldName}"?\n\nThis will remove all existing flower patches and spawn new ones. This action cannot be undone.`)) {
+            regenerateMapFeature(channel, currentWorldName, 'flowers');
+        }
+    });
+
 
     async function handleRename() {
         const newWorldName = worldNameInputEl.value.trim();

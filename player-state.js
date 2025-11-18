@@ -6,6 +6,8 @@ export const PLAYER_STATE = {
     HARVESTING_LOGS: 'harvesting_logs',
     MOVING_TO_BUSHES: 'moving_to_bushes',
     HARVESTING_BUSHES: 'harvesting_bushes',
+    MOVING_TO_FLOWERS: 'moving_to_flowers',
+    HARVESTING_FLOWERS: 'harvesting_flowers',
     SEARCHING_FOR_GATHERABLE: 'searching_for_gatherable',
     WANDERING_TO_GATHER: 'wandering_to_gather',
     SEARCHING_FOR_TREE: 'searching_for_tree',

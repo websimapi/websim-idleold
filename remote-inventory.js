@@ -72,6 +72,10 @@ function renderUI(state, data = {}) {
                         <span class="value" id="leaves-count">--</span>
                     </div>
                     <div class="inventory-item">
+                        <span class="label">🌸 Flowers:</span>
+                        <span class="value" id="flowers-count">--</span>
+                    </div>
+                    <div class="inventory-item">
                         <span class="label">🪓 Woodcutting XP:</span>
                         <span class="value" id="woodcutting-xp">--</span>
                     </div>
@@ -103,9 +107,18 @@ function updateInventoryDisplay(payload) {
     const { inventory, playerState } = payload;
     const logsEl = document.getElementById('logs-count');
     const leavesEl = document.getElementById('leaves-count');
-    if (logsEl && leavesEl) {
+    const flowersEl = document.getElementById('flowers-count');
+    if (logsEl && leavesEl && flowersEl) {
         logsEl.textContent = inventory.logs.toLocaleString();
         leavesEl.textContent = inventory.leaves.toLocaleString();
+        
+        let totalFlowers = 0;
+        if (inventory.flowers) {
+            for (const color in inventory.flowers) {
+                totalFlowers += Object.values(inventory.flowers[color]).reduce((sum, amount) => sum + amount, 0);
+            }
+        }
+        flowersEl.textContent = totalFlowers.toLocaleString();
     }
 
     if (playerState && playerState.skills) {

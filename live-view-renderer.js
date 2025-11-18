@@ -44,14 +44,15 @@ export class LiveViewRenderer {
             img.onload = () => resolve(img);
         });
 
-        const [grass, tree, logs, bushes] = await Promise.all([
+        const [grass, tree, logs, bushes, flowers] = await Promise.all([
             loadTile('./grass_tile.png'),
             loadTile('./tree.png'),
             loadTile('./logs.png'),
-            loadTile('./bushes.png')
+            loadTile('./bushes.png'),
+            loadTile('./flowers.png')
         ]);
 
-        this.assets = { grass, tree, logs, bushes };
+        this.assets = { grass, tree, logs, bushes, flowers };
         console.log("Live View assets loaded.");
     }
 
@@ -110,6 +111,7 @@ export class LiveViewRenderer {
                     let objectImage = null;
                     if (tileType === TILE_TYPE.LOGS) objectImage = this.assets.logs;
                     else if (tileType === TILE_TYPE.BUSHES) objectImage = this.assets.bushes;
+                    else if (tileType === TILE_TYPE.FLOWER_PATCH) objectImage = this.assets.flowers;
 
                     if (objectImage) {
                         ctx.drawImage(objectImage, screenX, screenY, this.tileSize, this.tileSize);

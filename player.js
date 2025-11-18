@@ -5,7 +5,7 @@ import { startGatheringCycle } from './behaviors/gathering.js';
 import { renderPlayer } from './player-renderer.js';
 import { TILE_TYPE } from './map-tile-types.js';
 import { findPath } from './pathfinding.js';
-import { beginChopping, beginHarvestingBushes, beginHarvestingLogs } from './behaviors/index.js';
+import { beginChopping, beginHarvestingBushes, beginHarvestingLogs, beginHarvestingFlowers } from './behaviors/index.js';
 import { PlayerEnergy } from './player-energy.js';
 import { PlayerInventory } from './player-inventory.js';
 import { PlayerSkills } from './player-skills.js';
@@ -263,6 +263,8 @@ export class Player {
             [PLAYER_STATE.HARVESTING_LOGS]: TILE_TYPE.LOGS,
             [PLAYER_STATE.MOVING_TO_BUSHES]: TILE_TYPE.BUSHES,
             [PLAYER_STATE.HARVESTING_BUSHES]: TILE_TYPE.BUSHES,
+            [PLAYER_STATE.MOVING_TO_FLOWERS]: TILE_TYPE.FLOWER_PATCH,
+            [PLAYER_STATE.HARVESTING_FLOWERS]: TILE_TYPE.FLOWER_PATCH,
         };
 
         const requiredTileType = stateToTileType[this.state];
@@ -289,6 +291,9 @@ export class Player {
                 } else if (this.state === PLAYER_STATE.HARVESTING_BUSHES) {
                     console.log(`[${this.username}] Re-initializing harvesting bushes state on load.`);
                     beginHarvestingBushes(this, gameMap, game);
+                } else if (this.state === PLAYER_STATE.HARVESTING_FLOWERS) {
+                    console.log(`[${this.username}] Re-initializing harvesting flowers state on load.`);
+                    beginHarvestingFlowers(this, gameMap, game);
                 }
 
                 // Re-calculate paths for movement states

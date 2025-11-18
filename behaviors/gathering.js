@@ -7,7 +7,7 @@ export function startGatheringCycle(player, gameMap, searchCenter = null, search
     player.state = PLAYER_STATE.SEARCHING_FOR_GATHERABLE;
     console.log(`[${player.username}] Starting gathering cycle, searching for resources.`);
 
-    const gatherableTypes = [TILE_TYPE.LOGS, TILE_TYPE.BUSHES];
+    const gatherableTypes = [TILE_TYPE.LOGS, TILE_TYPE.BUSHES, TILE_TYPE.FLOWER_PATCH];
     
     let allGatherables;
     if (searchCenter && searchRadius) {
@@ -50,6 +50,8 @@ export function startGatheringCycle(player, gameMap, searchCenter = null, search
                 player.state = PLAYER_STATE.MOVING_TO_LOGS;
             } else if (target.type === TILE_TYPE.BUSHES) {
                 player.state = PLAYER_STATE.MOVING_TO_BUSHES;
+            } else if (target.type === TILE_TYPE.FLOWER_PATCH) {
+                player.state = PLAYER_STATE.MOVING_TO_FLOWERS;
             }
             console.log(`[${player.username}] Found pathable gatherable at (${target.x}, ${target.y}). Moving to harvest.`);
             pathFound = true;
@@ -160,4 +162,58 @@ export function finishHarvestingBushes(player, gameMap, game) {
         // For both 'follow' and default commands, continue harvesting pending bushes.
         harvestNextBush(player, gameMap, game);
     }
+}
+
+const FLOWER_COLORS = [
+    '#FF6347', // Tomato
+    '#FFD700', // Gold
+    '#4682B4', // SteelBlue
+    '#9370DB', // MediumPurple
+    '#3CB371', // MediumSeaGreen
+    '#FFA07A', // LightSalmon
+    '#20B2AA', // LightSeaGreen
+    '#87CEFA', // LightSkyBlue
+    '#F08080', // LightCoral
+    '#FF69B4', // HotPink
+    '#BA55D3', // MediumOrchid
+    '#FFFFFF', // White
+];
+
+export function beginHarvestingFlowers(player, gameMap, game) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.FLOWER_PATCH) {
+        console.log(`[${player.username}] Attempted to harvest flowers that are already gone. Moving on.`);
+        startGatheringCycle(player, gameMap);
+        return;
+    }
+    player.state = PLAYER_STATE.HARVESTING_FLOWERS;
+    const duration = game.settings.gathering.harvest_flowers_duration_seconds;
+    player.actionTimer = duration;
+    player.actionTotalTime = duration;
+    console.log(`[${player.username}] Began harvesting flowers.`);
+}
+
+export function finishHarvestingFlowers(player, gameMap, game) {
+    if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.FLOWER_PATCH) {
+        console.log(`[${player.username}] Finished harvesting, but the flowers were already gone. Moving on.`);
+        startGatheringCycle(player, gameMap);
+        return;
+    }
+
+    const min = game.settings.gathering.harvest_flowers_min_yield;
+    const max = game.settings.gathering.harvest_flowers_max_yield;
+    const numFlowers = Math.floor(Math.random() * (max - min + 1)) + min;
+    
+    let xpGained = 0;
+    for (let i = 0; i < numFlowers; i++) {
+        const color = FLOWER_COLORS[Math.floor(Math.random() * FLOWER_COLORS.length)];
+        player.inventory.addFlower(color, 1, Date.now());
+        xpGained += game.settings.gathering.harvest_flowers_xp_per_flower;
+    }
+    
+    console.log(`[${player.username}] Harvested ${numFlowers} flowers. Total: ${player.inventory.getTotalFlowers()}.`);
+    player.addExperience('gathering', xpGained);
+    gameMap.grid[player.actionTarget.y][player.actionTarget.x] = TILE_TYPE.GRASS;
+    
+    // After harvesting flowers, continue the gathering cycle
+    startGatheringCycle(player, gameMap);
 }

@@ -2,7 +2,7 @@ import { PLAYER_STATE } from '../player-state.js';
 import { AudioManager } from '../audio-manager.js';
 import { updateWander, updateMoveToTarget, updateFollowPath } from '../player-movement.js';
 import { beginChopping, finishChopping, startChoppingCycle, findAndMoveToTree } from './chopping.js';
-import { beginHarvestingBushes, beginHarvestingLogs, finishHarvestingBushes, finishHarvestingLogs, harvestNextBush, startGatheringCycle } from './gathering.js';
+import { beginHarvestingBushes, beginHarvestingLogs, beginHarvestingFlowers, finishHarvestingBushes, finishHarvestingLogs, finishHarvestingFlowers, harvestNextBush, startGatheringCycle } from './gathering.js';
 import { updateFollow } from './following.js';
 import { TILE_TYPE } from '../map-tile-types.js';
 import { findPath } from '../pathfinding.js';
@@ -139,6 +139,24 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             break;
 
+        case PLAYER_STATE.MOVING_TO_FLOWERS:
+             if (!player.actionTarget || gameMap.grid[player.actionTarget.y][player.actionTarget.x] !== TILE_TYPE.FLOWER_PATCH) {
+                console.log(`[${player.username}] Target flower patch at (${player.actionTarget?.x}, ${player.actionTarget?.y}) is gone. Moving on.`);
+                startGatheringCycle(player, gameMap);
+                return;
+            }
+            updateFollowPath(player, deltaTime, gameMap);
+
+            const dxFlowers = player.pixelX - (player.actionTarget.x + 0.5);
+            const dyFlowers = player.pixelY - (player.actionTarget.y + 0.5);
+            const distSqFlowers = dxFlowers * dxFlowers + dyFlowers * dyFlowers;
+            const interactionDistSqFlowers = 1.2 * 1.2;
+
+            if (atMoveTarget || distSqFlowers < interactionDistSqFlowers) {
+                beginHarvestingFlowers(player, gameMap, game);
+            }
+            break;
+
         case PLAYER_STATE.WANDERING_TO_GATHER:
             updateWander(player, deltaTime, gameMap);
             const distFromSearch = Math.sqrt(
@@ -179,6 +197,13 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             player.actionTimer -= deltaTime;
             if (player.actionTimer <= 0) {
                 finishHarvestingBushes(player, gameMap, game);
+            }
+            break;
+
+        case PLAYER_STATE.HARVESTING_FLOWERS:
+            player.actionTimer -= deltaTime;
+            if (player.actionTimer <= 0) {
+                finishHarvestingFlowers(player, gameMap, game);
             }
             break;
     }
