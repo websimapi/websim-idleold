@@ -97,6 +97,14 @@ export class Game {
         const player = this.players.get(userId);
         if (!player) return;
 
+        if (command === 'me') {
+            if (this.settings.visuals.allow_me_command) {
+                this.camera.setFocus(player.id);
+                console.log(`[${player.username}] used !me command to focus camera.`);
+            }
+            return;
+        }
+
         // --- Host Command Check ---
         if (command === 'energy') {
             if (!this.hosts.has(player.username.toLowerCase())) {

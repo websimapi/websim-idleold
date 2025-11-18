@@ -95,6 +95,10 @@ export function showWorldSettings(channel, worldName) {
                         <input type="checkbox" id="show_pathing_lines" data-path="visuals.show_pathing_lines" ${settings.visuals && settings.visuals.show_pathing_lines ? 'checked' : ''}>
                         <label for="show_pathing_lines">Show Pathing Lines</label>
                     </div>
+                    <div class="setting-item">
+                        <input type="checkbox" id="allow_me_command" data-path="visuals.allow_me_command" ${settings.visuals && settings.visuals.allow_me_command ? 'checked' : ''}>
+                        <label for="allow_me_command">Allow !me Command</label>
+                    </div>
                 </div>
             </div>
             <div class="settings-column">

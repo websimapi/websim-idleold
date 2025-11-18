@@ -22,6 +22,7 @@ export const DEFAULT_GAME_SETTINGS = {
         show_target_indicator: true,
         show_hitboxes: false,
         show_pathing_lines: false,
+        allow_me_command: true,
     }
 };
 

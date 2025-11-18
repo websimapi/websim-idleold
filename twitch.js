@@ -38,6 +38,9 @@ export function initTwitch(channel, onChatter, onCommand) {
         }
 
         const lastChatter = recentChatters.get(userId);
+        const commandText = message.trim();
+        const parts = commandText.split(/\s+/);
+        const command = parts[0].toLowerCase();
 
         if (!lastChatter || now - lastChatter.lastMessageTimestamp > ENERGY_COOLDOWN) {
             const chatterData = {
@@ -50,13 +53,16 @@ export function initTwitch(channel, onChatter, onCommand) {
             if (userId) { // Double-check userId before calling onChatter
                 onChatter(chatterData);
             }
+            
+            // Only allow !me command on cooldown, like gaining energy
+            if (command === '!me') {
+                if (onCommand) {
+                    onCommand(userId, 'me');
+                }
+            }
         }
 
         // Handle commands on every message
-        const commandText = message.trim();
-        const parts = commandText.split(/\s+/);
-        const command = parts[0].toLowerCase();
-
         if (command === '!chop') {
             if (onCommand) {
                 onCommand(userId, 'chop');
