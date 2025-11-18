@@ -122,11 +122,23 @@ export async function initRemoteInventory() {
         await room.initialize();
         console.log('Remote inventory socket initialized.');
 
+        // Request host info as soon as we connect.
+        console.log('Broadcasting request for host info...');
+        room.send({ type: 'request_host_info' });
+
+        const hostCheckTimeout = setTimeout(() => {
+            if (!hostClientId && !isLinked) {
+                console.log('No host responded in time.');
+                renderUI(STATUS.HOST_NOT_FOUND);
+            }
+        }, 3000); // Wait 3 seconds for a host to respond.
+
         room.onmessage = (event) => {
             const data = event.data;
 
             // First, listen for the host to come online.
             if (data.type === 'host_online') {
+                clearTimeout(hostCheckTimeout);
                 hostClientId = data.hostId;
                 console.log(`Host found with clientId: ${hostClientId}`);
                 if (!isLinked) { // Don't change UI if already linked

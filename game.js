@@ -98,13 +98,20 @@ export class Game {
             this.room = new WebsimSocket();
             await this.room.initialize();
             
-            // Announce that the host is online
+            // Announce that the host is online for anyone already connected
             this.room.send({ type: 'host_online', hostId: this.room.clientId });
 
             this.room.onmessage = (event) => {
-                // The event 'from' property is deprecated, use clientId from the event data
-                if (event.data.type === 'request_link') {
-                    this.handleLinkRequest(event.data.clientId);
+                const data = event.data;
+                const fromClientId = data.clientId;
+                
+                if (data.type === 'request_link') {
+                    this.handleLinkRequest(fromClientId);
+                } else if (data.type === 'request_host_info') {
+                    console.log(`Received host info request from ${fromClientId}. Responding.`);
+                    // A client just connected and is looking for the host.
+                    // Broadcast our presence again so they can see it.
+                    this.room.send({ type: 'host_online', hostId: this.room.clientId });
                 }
             };
         } catch (error) {
