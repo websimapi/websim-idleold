@@ -23,6 +23,7 @@ export const DEFAULT_GAME_SETTINGS = {
         harvest_flowers_xp_per_flower: 1,
     },
     visuals: {
+        view_mode: '2d', // '2d' or '2.5d'
         show_target_indicator: true,
         show_hitboxes: false,
         show_pathing_lines: false,

@@ -6,6 +6,10 @@ let hostClientId = null;
 let linkRequested = false;
 let isLinked = false;
 let liveViewRenderer = null;
+let liveViewMode = '2d'; // '2d' or '2.5d'
+
+// New: local storage key for JWT-style token
+const LOCAL_STORAGE_TOKEN_KEY = 'twitch_live_view_jwt';
 
 const STATUS = {
     INITIAL: 'initial',
@@ -25,44 +29,60 @@ function renderUI(state, data = {}) {
     switch (state) {
         case STATUS.INITIAL:
             content = `
-                <h2>View Your In-Game Inventory</h2>
-                <p>If the project creator is currently hosting a game, you can link your Twitch account to view your inventory here in real-time.</p>
-                <button id="request-link-btn" disabled>Waiting for Host...</button>
+                <div class="live-view-center-state">
+                    <h2>View Your In-Game Inventory</h2>
+                    <p>If the project creator is currently hosting a game, you can link your Twitch account to view your inventory here in real-time.</p>
+                    <button id="request-link-btn" disabled>Waiting for Host...</button>
+                </div>
             `;
             break;
         case STATUS.HOST_FOUND:
             content = `
-                <h2>Host is Online!</h2>
-                <p>The project creator is hosting a game. You can now request a link to view your inventory.</p>
-                <button id="request-link-btn">Request Link</button>
+                <div class="live-view-center-state">
+                    <h2>Host is Online!</h2>
+                    <p>The project creator is hosting a game. You can now request a link to view your inventory.</p>
+                    <button id="request-link-btn">Request Link</button>
+                </div>
             `;
             break;
         case STATUS.REQUESTING:
             content = `
-                <h2>Connecting...</h2>
-                <p>Sending a link request to the host. Please wait.</p>
-                <button id="request-link-btn" disabled>Requesting...</button>
+                <div class="live-view-center-state">
+                    <h2>Connecting...</h2>
+                    <p>Sending a link request to the host. Please wait.</p>
+                    <button id="request-link-btn" disabled>Requesting...</button>
+                </div>
             `;
             break;
         case STATUS.HOST_NOT_FOUND:
-             content = `
-                <h2>Host Not Found</h2>
-                <p>The project creator does not appear to be hosting a game right now. Please try again later.</p>
+            content = `
+                <div class="live-view-center-state">
+                    <h2>Host Not Found</h2>
+                    <p>The project creator does not appear to be hosting a game right now. Please try again later.</p>
+                </div>
             `;
             break;
         case STATUS.RECEIVED_CODE:
             content = `
-                <h2>Link Your Account</h2>
-                <p>The host has generated a pairing code for you. To finish, go to the host's Twitch channel and type the following command in chat:</p>
-                <div class="code-display">${data.code}</div>
-                <p><strong>!link ${data.code}</strong></p>
-                <p><small>This code will expire in 5 minutes.</small></p>
+                <div class="live-view-center-state">
+                    <h2>Link Your Account</h2>
+                    <p>The host has generated a pairing code for you. To finish, go to the host's Twitch channel and type the following command in chat:</p>
+                    <div class="code-display">${data.code}</div>
+                    <p><strong>!link ${data.code}</strong></p>
+                    <p><small>This code will expire in 5 minutes.</small></p>
+                </div>
             `;
             break;
         case STATUS.LINKED:
             content = `
-                <h2>${data.username}'s Inventory & Skills</h2>
-                <div class="inventory-display">
+                <button id="live-view-toggle-view-btn">
+                    ${liveViewMode === '2.5d' ? '2.5D View' : '2D View'}
+                </button>
+                <div class="live-view-inventory-panel inventory-display">
+                    <div class="inventory-item">
+                        <span class="label" id="inventory-owner-label">${data.username || 'Your'}'s Inventory</span>
+                        <span class="value"></span>
+                    </div>
                     <div class="inventory-item">
                         <span class="label">🪵 Logs:</span>
                         <span class="value" id="logs-count">--</span>
@@ -84,23 +104,59 @@ function renderUI(state, data = {}) {
                         <span class="value" id="gathering-xp">--</span>
                     </div>
                 </div>
-                <p><small>Your inventory will update automatically.</small></p>
             `;
-            if (!liveViewRenderer) {
-                const canvas = document.getElementById('live-view-canvas');
-                liveViewRenderer = new LiveViewRenderer(canvas);
-                liveViewRenderer.start();
-            }
             break;
         case STATUS.ERROR:
             content = `
-                <h2>Error</h2>
-                <p>An error occurred while trying to connect to the host. Please refresh and try again.</p>
-                <p><small>${data.message || ''}</small></p>
+                <div class="live-view-center-state">
+                    <h2>Error</h2>
+                    <p>An error occurred while trying to connect to the host. Please refresh and try again.</p>
+                    <p><small>${data.message || ''}</small></p>
+                </div>
             `;
             break;
     }
     contentContainer.innerHTML = content;
+
+    // Attach handlers for buttons after DOM update
+    const requestBtn = document.getElementById('request-link-btn');
+    if (requestBtn) {
+        requestBtn.addEventListener('click', () => {
+            requestLink();
+        });
+    }
+
+    const toggleBtn = document.getElementById('live-view-toggle-view-btn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            liveViewMode = liveViewMode === '2d' ? '2.5d' : '2d';
+            if (liveViewRenderer) {
+                liveViewRenderer.setViewMode(liveViewMode);
+            }
+            // Re-render overlay button label
+            renderUI(STATUS.LINKED, { username: data.username || 'Your' });
+        });
+    }
+}
+
+// Helper: read a stored token and check expiry
+function getStoredToken() {
+    const raw = localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY);
+    if (!raw) return null;
+    try {
+        const decoded = atob(raw);
+        const payload = JSON.parse(decoded);
+        if (!payload.exp || Date.now() > payload.exp) {
+            console.log("Stored live view token has expired, clearing.");
+            localStorage.removeItem(LOCAL_STORAGE_TOKEN_KEY);
+            return null;
+        }
+        return raw;
+    } catch (e) {
+        console.warn("Failed to parse stored live view token, clearing.", e);
+        localStorage.removeItem(LOCAL_STORAGE_TOKEN_KEY);
+        return null;
+    }
 }
 
 function updateInventoryDisplay(payload) {
@@ -121,6 +177,7 @@ function updateInventoryDisplay(payload) {
         flowersEl.textContent = totalFlowers.toLocaleString();
     }
 
+    // Update XP and inventory owner label based on the Twitch player's state
     if (playerState && playerState.skills) {
         const woodcuttingXpEl = document.getElementById('woodcutting-xp');
         const gatheringXpEl = document.getElementById('gathering-xp');
@@ -134,6 +191,11 @@ function updateInventoryDisplay(payload) {
             const totalGathExp = Object.values(playerState.skills.gathering || {}).reduce((sum, amount) => sum + amount, 0);
             gatheringXpEl.textContent = totalGathExp.toLocaleString();
         }
+
+        const ownerLabelEl = document.getElementById('inventory-owner-label');
+        if (ownerLabelEl && playerState.username) {
+            ownerLabelEl.textContent = `${playerState.username}'s Inventory`;
+        }
     }
 }
 
@@ -142,7 +204,7 @@ async function requestLink() {
     linkRequested = true;
     renderUI(STATUS.REQUESTING);
 
-    const linkTimeout = setTimeout(() => {
+    setTimeout(() => {
         if (!isLinked) {
             renderUI(STATUS.HOST_NOT_FOUND);
             linkRequested = false;
@@ -150,19 +212,23 @@ async function requestLink() {
     }, 5000); // 5 seconds for the host to respond with a code
 
     room.send({ type: 'request_link' });
-
-    // The onmessage handler is now set in initRemoteInventory, so we don't need to re-assign it here.
-    // This prevents race conditions.
 }
 
 export async function initRemoteInventory() {
     renderUI(STATUS.INITIAL);
 
     DOM.remoteInventoryContainer.addEventListener('click', (e) => {
+        // Keep support for clicking the button if event is not caught inside overlay
         if (e.target.id === 'request-link-btn') {
             requestLink();
         }
     });
+
+    // Check for existing token immediately
+    const existingToken = getStoredToken();
+    if (existingToken) {
+        console.log("Found stored live view token, will attempt automatic authentication.");
+    }
 
     try {
         room = new WebsimSocket();
@@ -188,7 +254,18 @@ export async function initRemoteInventory() {
                 clearTimeout(hostCheckTimeout);
                 hostClientId = data.hostId;
                 console.log(`Host found with clientId: ${hostClientId}`);
-                if (!isLinked) { // Don't change UI if already linked
+
+                // If we have a stored token, try automatic authentication
+                const token = getStoredToken();
+                if (token && !isLinked) {
+                    console.log("Attempting automatic live view authentication with stored token.");
+                    room.send({
+                        type: 'auth_with_token',
+                        token
+                    });
+                    // While we wait, keep UI simple; host will respond with link_success/live_view_update
+                } else if (!isLinked) {
+                    // No token, show host-found state so user can request link
                     renderUI(STATUS.HOST_FOUND);
                 }
                 return; // Stop processing this event.
@@ -203,11 +280,37 @@ export async function initRemoteInventory() {
                 if (!isLinked) {
                     isLinked = true;
                     renderUI(STATUS.LINKED, { username: data.username });
+                    if (!liveViewRenderer) {
+                        const canvas = document.getElementById('live-view-canvas');
+                        liveViewRenderer = new LiveViewRenderer(canvas);
+                        liveViewRenderer.setViewMode(liveViewMode);
+                        liveViewRenderer.start();
+                    }
+                }
+            } else if (data.type === 'jwt_token') {
+                // Store the token for future automatic authentication
+                if (data.token) {
+                    try {
+                        const decoded = atob(data.token);
+                        const payload = JSON.parse(decoded);
+                        if (payload && payload.exp) {
+                            localStorage.setItem(LOCAL_STORAGE_TOKEN_KEY, data.token);
+                            console.log(`Stored live view token valid until ${new Date(payload.exp).toISOString()}`);
+                        }
+                    } catch (e) {
+                        console.error("Failed to store JWT token:", e);
+                    }
                 }
             } else if (data.type === 'live_view_update') {
                 if (!isLinked) { // First inventory update also confirms a successful link
                     isLinked = true;
                     renderUI(STATUS.LINKED, { username: data.payload.playerState.username || 'Your' });
+                    if (!liveViewRenderer) {
+                        const canvas = document.getElementById('live-view-canvas');
+                        liveViewRenderer = new LiveViewRenderer(canvas);
+                        liveViewRenderer.setViewMode(liveViewMode);
+                        liveViewRenderer.start();
+                    }
                 }
                 updateInventoryDisplay(data.payload);
                 if (liveViewRenderer) {
@@ -217,15 +320,10 @@ export async function initRemoteInventory() {
         };
 
         // If the host is already online, we might have missed the initial broadcast.
-        // Let's check for any peers who might be the host.
-        // This is a simple check; a more robust system might involve a direct "who is host" request.
         const creator = await window.websim.getCreator();
         if (room.peers[creator.id]) {
-             // This check is imperfect as peer ID is not the same as clientId, but it's a good heuristic for now.
-             // The creator is in the room. Assume they are the host and enable the button.
-             // The proper `host_online` event will still be the primary source of truth for the clientId.
+             // Heuristic: creator is present.
         }
-
 
     } catch (error) {
         console.error('Failed to initialize WebsimSocket for remote inventory:', error);

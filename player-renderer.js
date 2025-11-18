@@ -1,4 +1,5 @@
 import { PLAYER_STATE } from './player-state.js';
+import { project } from './game/projection.js';
 
 let woodcuttingIcon = null;
 let gatheringIcon = null;
@@ -153,10 +154,30 @@ function drawEnergyBar(ctx, player, screenX, usernameTagY, usernameFontSize) {
     }
 }
 
-export function renderPlayer(ctx, player, tileSize, cameraX, cameraY) {
+export function renderPlayer(ctx, player, tileSize, cameraX, cameraY, viewMode = '2d') {
     const radius = tileSize / 2.5;
-    const screenX = ((player.pixelX + player.offsetX) * tileSize) - cameraX;
-    const screenY = ((player.pixelY + player.offsetY) * tileSize) - cameraY;
+    
+    // In 2D, pixelX/Y is top-left of sprite? No, logic uses it as coord.
+    // We want the center of the player visually.
+    // Player coord is (pixelX, pixelY) which is top-left of the tile unit usually?
+    // Previous code: screenX = (pixelX + offsetX) * tileSize - cameraX
+    // This implies pixelX is a float grid coordinate.
+    
+    // In 2.5D, we want the player to stand at that point.
+    // project() returns the point on the "ground".
+    const pos = project(player.pixelX + player.offsetX, player.pixelY + player.offsetY, 0, viewMode, tileSize);
+    
+    let screenX, screenY;
+    
+    if (viewMode === '2.5d') {
+        // Center horizontal, bottom align vertical?
+        screenX = pos.x - cameraX;
+        screenY = pos.y - cameraY - (radius/2); // Lift slightly so circle sits on ground point?
+        // For "paper style", we just draw the circle at the projected point, maybe shifted up so the bottom touches.
+    } else {
+        screenX = pos.x - cameraX;
+        screenY = pos.y - cameraY;
+    }
 
     ctx.save();	
 
@@ -182,7 +203,7 @@ export function renderPlayer(ctx, player, tileSize, cameraX, cameraY) {
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.lineWidth = 3;
 
-    const tagY = screenY - radius - 18;
+    const tagY = screenY - radius - 8; // Lift tags a bit
 
     ctx.strokeText(player.username, screenX, tagY);
     ctx.fillText(player.username, screenX, tagY);

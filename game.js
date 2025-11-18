@@ -12,6 +12,9 @@ import { DEFAULT_GAME_SETTINGS } from './game-settings.js';
 import { setEnergyCooldown } from './twitch.js';
 import { renderGame } from './game/renderer.js';
 import { updateActiveChopping } from './game/chopping-manager.js';
+// New imports for refactored logic
+import { initRealtimeHost, sendLiveViewUpdate } from './game/realtime.js';
+import { handlePlayerCommand as handlePlayerCommandImpl } from './game/commands.js';
 
 export class Game {
     constructor(canvas, channel, worldName = 'default', hosts = [], settings = DEFAULT_GAME_SETTINGS) {
@@ -25,8 +28,9 @@ export class Game {
         console.log("Game started with settings:", this.settings);
 
         this.players = new Map();
-        this.map = new GameMap(32); // TileSize is 32
-        this.camera = new Camera(this.canvas, this.map, this.players);
+        this.baseTileSize = 32;
+        this.map = new GameMap(this.baseTileSize); // TileSize is 32
+        this.camera = new Camera(this.canvas, this.map, this.players, this.settings);
         this.activeChoppingTargets = new Map();
 
         // Realtime communication for remote inventory
@@ -41,13 +45,21 @@ export class Game {
         window.addEventListener('resize', () => this.resize());
         window.addEventListener('keydown', (e) => this.handleKeyPress(e));
         
+        // Mouse wheel zoom (on canvas only)
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            this.camera.handleWheel(e.deltaY);
+        }, { passive: false });
+        
         this.saveInterval = setInterval(async () => {
             await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
         }, 5000); // Save every 5 seconds
     }
 
     async init() {
-        await this.initRealtime();
+        // Refactored realtime initialization into game/realtime.js
+        await initRealtimeHost(this);
+
         await StorageManager.init(this.channel, this.worldName);
         const gameState = await StorageManager.loadGameState(this.channel, this.worldName);
 
@@ -82,113 +94,15 @@ export class Game {
         }, 5000); // Save every 5 seconds
     }
 
-    async initRealtime() {
-        if (this.room) return;
-        try {
-            const project = await window.websim.getCurrentProject();
-            const creator = await window.websim.getCreator();
-            const user = await window.websim.getCurrentUser();
-
-            // Only the project creator should act as the host
-            if (user.id !== creator.id) {
-                console.log("Not the project creator, real-time hosting disabled.");
-                return;
-            }
-
-            console.log("Project creator detected. Initializing real-time host...");
-            this.room = new WebsimSocket();
-            await this.room.initialize();
-            
-            // Announce that the host is online for anyone already connected
-            this.room.send({ type: 'host_online', hostId: this.room.clientId });
-
-            this.room.onmessage = (event) => {
-                const data = event.data;
-                const fromClientId = data.clientId;
-                
-                if (data.type === 'request_link') {
-                    this.handleLinkRequest(fromClientId);
-                } else if (data.type === 'request_host_info') {
-                    console.log(`Received host info request from ${fromClientId}. Responding.`);
-                    // A client just connected and is looking for the host.
-                    // Broadcast our presence again so they can see it.
-                    this.room.send({ type: 'host_online', hostId: this.room.clientId });
-                }
-            };
-        } catch (error) {
-            console.error("Failed to initialize real-time features:", error);
-        }
-    }
-
-    handleLinkRequest(clientId) {
-        if (!this.room) return;
-        
-        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        this.pendingLinks.set(code, { clientId, expiry: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
-        
-        // Broadcast the code, the specific client will pick it up
-        this.room.send({ 
-            type: 'pairing_code', 
-            forClientId: clientId, 
-            code: code 
-        });
-        
-        console.log(`Generated pairing code ${code} for client ${clientId}`);
-        
-        // Clean up expired codes
-        setTimeout(() => {
-            if (this.pendingLinks.has(code)) {
-                this.pendingLinks.delete(code);
-                console.log(`Pairing code ${code} expired.`);
-            }
-        }, 5 * 60 * 1000);
-    }
-
-    sendLiveViewUpdate(player) {
-        if (!this.room || !player || !this.linkedPlayers.has(player.id)) return;
-
-        const clientId = this.linkedPlayers.get(player.id);
-        const inventoryData = {
-            logs: player.inventory.getLogCount(),
-            leaves: player.inventory.getTotalLeaves(),
-            flowers: player.inventory.flowers,
-        };
-
-        // Gather surrounding map data
-        const VIEW_RADIUS = 8;
-        const mapChunkData = this.map.getChunk(player.pixelX, player.pixelY, VIEW_RADIUS);
-
-        // Gather nearby players
-        const nearbyPlayers = [];
-        for (const otherPlayer of this.players.values()) {
-            if (otherPlayer.id !== player.id && otherPlayer.isPowered()) {
-                const dx = player.pixelX - otherPlayer.pixelX;
-                const dy = player.pixelY - otherPlayer.pixelY;
-                if (dx * dx + dy * dy < VIEW_RADIUS * VIEW_RADIUS) {
-                    nearbyPlayers.push(otherPlayer.getState());
-                }
-            }
-        }
-
-        this.room.send({
-            type: 'live_view_update',
-            forClientId: clientId,
-            payload: {
-                inventory: inventoryData,
-                playerState: player.getState(),
-                mapChunk: mapChunkData,
-                nearbyPlayers: nearbyPlayers,
-            }
-        });
-    }
-
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
         
-        // Use a fixed tileSize for gameplay scale, allowing the map to be larger than viewport
-        const fixedTileSize = 32; 
-        this.map.setTileSize(fixedTileSize);
+        // Use a fixed base tileSize for gameplay scale, allowing the map to be larger than viewport
+        const fixedTileSize = this.baseTileSize; 
+        // Apply current zoom level from camera
+        const zoomedTileSize = fixedTileSize * (this.camera?.zoom || 1);
+        this.map.setTileSize(zoomedTileSize);
 
         this.map.setViewport(this.canvas.width, this.canvas.height);
     }
@@ -201,141 +115,8 @@ export class Game {
     }
 
     handlePlayerCommand(userId, command, args) {
-        const player = this.players.get(userId);
-        if (!player) return;
-
-        if (command === 'me') {
-            if (this.settings.visuals.allow_me_command) {
-                this.camera.setFocus(player.id);
-                console.log(`[${player.username}] used !me command to focus camera.`);
-            }
-            return;
-        }
-
-        // --- Host Command Check ---
-        if (command === 'energy') {
-            if (!this.hosts.has(player.username.toLowerCase())) {
-                console.log(`[${player.username}] tried to use host command !energy but is not a host.`);
-                return;
-            }
-
-            const amount = args && !isNaN(args.amount) ? Math.max(1, Math.min(12, args.amount)) : 1;
-            let targetPlayer = player;
-
-            if (args && args.targetUsername) {
-                const targetUsernameLower = args.targetUsername.toLowerCase();
-                const foundTarget = Array.from(this.players.values()).find(p => p.username.toLowerCase() === targetUsernameLower);
-                if (foundTarget) {
-                    targetPlayer = foundTarget;
-                } else {
-                    console.log(`[${player.username}] tried to give energy to non-existent player "${args.targetUsername}".`);
-                    return; // Target not found
-                }
-            }
-            
-            targetPlayer.addEnergy(amount);
-            console.log(`[Host] ${player.username} gave ${amount} energy to ${targetPlayer.username}.`);
-            return;
-        }
-
-        if (command === 'link') {
-            const code = args.code ? args.code.toUpperCase() : null;
-            if (this.room && code && this.pendingLinks.has(code)) {
-                const linkData = this.pendingLinks.get(code);
-
-                if (Date.now() > linkData.expiry) {
-                    console.log(`[${player.username}] tried to use expired code ${code}.`);
-                    this.pendingLinks.delete(code);
-                    return;
-                }
-                
-                // Unlink any old client associated with this twitch user
-                for (const [key, value] of this.linkedPlayers.entries()) {
-                    if (value === linkData.clientId) {
-                        this.linkedPlayers.delete(key);
-                    }
-                }
-
-                this.linkedPlayers.set(player.id, linkData.clientId);
-                this.pendingLinks.delete(code);
-
-                console.log(`[${player.username}] successfully linked their account with client ${linkData.clientId}.`);
-
-                this.room.send({
-                    type: 'link_success',
-                    forClientId: linkData.clientId,
-                    username: player.username
-                });
-                
-                this.sendLiveViewUpdate(player);
-            } else {
-                console.log(`[${player.username}] tried to use invalid or non-existent code "${code}".`);
-            }
-            return;
-        }
-
-        if (!player.isPowered()) {
-             console.log(`Player ${player.username} issued command "${command}" but has no energy.`);
-             // Allow setting the command even without energy, it will start when they get some.
-        }
-
-        if (command === 'chop') {
-            player.activeCommand = 'chop';
-            player.followTargetId = null;
-            if (player.isPowered()) {
-                startChoppingCycle(player, this.map);
-                console.log(`Player ${player.username} initiated !chop command.`);
-            } else {
-                 console.log(`Player ${player.username} set !chop command. It will start when they have energy.`);
-            }
-        } else if (command === 'gather') {
-            player.activeCommand = 'gather';
-            player.followTargetId = null;
-            if (player.isPowered()) {
-                startGatheringCycle(player, this.map);
-                console.log(`Player ${player.username} initiated !gather command.`);
-            } else {
-                console.log(`Player ${player.username} set !gather command. It will start when it has energy.`);
-            }
-        } else if (command === 'follow') {
-            let targetPlayer = null;
-            if (args && args.targetUsername) {
-                const targetUsernameLower = args.targetUsername.toLowerCase();
-                // Find any player, even offline, to store their ID. The follow logic will handle if they are powered or not.
-                targetPlayer = Array.from(this.players.values()).find(p => p.username.toLowerCase() === targetUsernameLower);
-                 if (!targetPlayer) {
-                    console.log(`[${player.username}] Could not find any player (online or off) named "${args.targetUsername}".`);
-                    return;
-                }
-            } else {
-                // Find nearest powered player
-                let minDistance = Infinity;
-                for (const otherPlayer of this.players.values()) {
-                    if (otherPlayer.id === player.id || !otherPlayer.isPowered()) continue;
-                    const dx = otherPlayer.pixelX - player.pixelX;
-                    const dy = otherPlayer.pixelY - player.pixelY;
-                    const distance = dx * dx + dy * dy;
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        targetPlayer = otherPlayer;
-                    }
-                }
-            }
-
-            if (targetPlayer) {
-                player.activeCommand = 'follow';
-                player.followTargetId = targetPlayer.id;
-                if (player.isPowered()) {
-                    player.state = PLAYER_STATE.FOLLOWING;
-                }
-                console.log(`[${player.username}] will now follow ${targetPlayer.username}.`);
-            } else {
-                console.log(`[${player.username}] Could not find anyone nearby to follow.`);
-                if (player.isPowered()) {
-                    player.state = PLAYER_STATE.IDLE;
-                }
-            }
-        }
+        // Delegated to game/commands.js for maintainability
+        handlePlayerCommandImpl(this, userId, command, args);
     }
 
     addOrUpdatePlayer(chatter) {
@@ -406,7 +187,8 @@ export class Game {
         for (const player of this.players.values()) {
             player.update(deltaTime, this.map, this.players, this);
             if (this.linkedPlayers.has(player.id) && shouldSendUpdate) {
-                this.sendLiveViewUpdate(player);
+                // Use refactored helper in game/realtime.js
+                sendLiveViewUpdate(this, player);
             }
         }
 

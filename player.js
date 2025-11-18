@@ -376,4 +376,8 @@ export class Player {
     render(ctx, tileSize, cameraX, cameraY) {
         renderPlayer(ctx, this, tileSize, cameraX, cameraY);
     }
+
+    render(ctx, tileSize, cameraX, cameraY, viewMode) { // Added viewMode
+        renderPlayer(ctx, this, tileSize, cameraX, cameraY, viewMode);
+    }
 }
