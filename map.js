@@ -1,44 +1,6 @@
 import { TILE_TYPE } from './map-tile-types.js';
-import * as StorageManager from './storage-manager.js';
-
-export async function regenerateMapFeature(channel, worldName, feature) {
-    console.log(`Regenerating ${feature} for world ${worldName}...`);
-    const worldState = await StorageManager.loadGameState(channel, worldName);
-    if (!worldState) {
-        alert(`Could not load world data for ${worldName}.`);
-        return;
-    }
-
-    // Use a temporary Map instance to run the logic
-    const tempMap = new Map(32);
-    if (worldState.map && worldState.map.grid && worldState.map.grid.length > 0) {
-        tempMap.grid = worldState.map.grid;
-    } else {
-        // If map is empty, create a base grass grid
-        tempMap.grid = Array(tempMap.height).fill(0).map(() => Array(tempMap.width).fill(TILE_TYPE.GRASS));
-    }
-
-    if (feature === 'trees') {
-        tempMap.regenerateTrees();
-    } else if (feature === 'flowers') {
-        tempMap.regenerateFlowers();
-    }
-
-    // Save the updated map back
-    worldState.map.grid = tempMap.grid;
-    
-    // We need to pass a Map-like object to saveGameState, not the full Player instances
-    const dummyPlayers = new window.Map(); // Use window.Map to avoid conflict with the Map class from this module
-    for (const id in worldState.players) {
-        dummyPlayers.set(id, { getState: () => worldState.players[id] });
-    }
-    const dummyMap = { grid: tempMap.grid, treeRespawns: worldState.map.treeRespawns || [] };
-
-    await StorageManager.saveGameState(channel, worldName, dummyPlayers, dummyMap);
-
-    alert(`${feature.charAt(0).toUpperCase() + feature.slice(1)} have been regenerated for "${worldName}"! The changes will be visible the next time you load the world.`);
-}
-
+import { MapFinder } from './map/map-finder.js';
+import { MapRenderer } from './map/map-renderer.js';
 
 export class Map {
     constructor(tileSize) {
@@ -54,6 +16,18 @@ export class Map {
         this.treeRespawns = [];
         this.viewportWidth = 0;
         this.viewportHeight = 0;
+
+        // Refactored helpers
+        this.finder = new MapFinder(this);
+        this.renderer = new MapRenderer(this);
+
+        // Alias methods for backward compatibility
+        this.findAll = this.finder.findAll.bind(this.finder);
+        this.findAllInRadius = this.finder.findAllInRadius.bind(this.finder);
+        this.findNearest = this.finder.findNearest.bind(this.finder);
+        this.findNearestInRadius = this.finder.findNearestInRadius.bind(this.finder);
+        this.getTallObjects = this.renderer.getTallObjects.bind(this.renderer);
+        this.renderBase = this.renderer.renderBase.bind(this.renderer);
     }
 
     setViewport(width, height) {
@@ -248,91 +222,6 @@ export class Map {
         return false;
     }
 
-    findAll(tileTypes) {
-        if (!Array.isArray(tileTypes)) tileTypes = [tileTypes];
-        const locations = [];
-        for (let j = 0; j < this.height; j++) {
-            for (let i = 0; i < this.width; i++) {
-                const tileType = this.grid[j][i];
-                if (tileTypes.includes(tileType)) {
-                    locations.push({ x: i, y: j, type: tileType });
-                }
-            }
-        }
-        return locations;
-    }
-
-    findAllInRadius(x, y, tileTypes, radius) {
-        if (!Array.isArray(tileTypes)) tileTypes = [tileTypes];
-        const locations = [];
-
-        const startX = Math.max(0, Math.floor(x - radius));
-        const endX = Math.min(this.width - 1, Math.ceil(x + radius));
-        const startY = Math.max(0, Math.floor(y - radius));
-        const endY = Math.min(this.height - 1, Math.ceil(y + radius));
-        const radiusSq = radius * radius;
-
-        for (let j = startY; j <= endY; j++) {
-            for (let i = startX; i <= endX; i++) {
-                const tileType = this.grid[j][i];
-                if (tileTypes.includes(tileType)) {
-                    const dx = i - x;
-                    const dy = j - y;
-                    if (dx * dx + dy * dy <= radiusSq) {
-                        locations.push({ x: i, y: j, type: tileType });
-                    }
-                }
-            }
-        }
-        return locations;
-    }
-
-    findNearest(x, y, tileType) {
-        let nearest = null;
-        let minDistance = Infinity;
-
-        for (let j = 0; j < this.height; j++) {
-            for (let i = 0; i < this.width; i++) {
-                if (this.grid[j][i] === tileType) {
-                    const dx = i - x;
-                    const dy = j - y;
-                    const distance = dx * dx + dy * dy; // Use squared distance for efficiency
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        nearest = { x: i, y: j };
-                    }
-                }
-            }
-        }
-        return nearest;
-    }
-
-    findNearestInRadius(x, y, tileTypes, radius) {
-        let nearest = null;
-        let minDistance = Infinity;
-
-        const startX = Math.max(0, Math.floor(x - radius));
-        const endX = Math.min(this.width - 1, Math.ceil(x + radius));
-        const startY = Math.max(0, Math.floor(y - radius));
-        const endY = Math.min(this.height - 1, Math.ceil(y + radius));
-
-        for (let j = startY; j <= endY; j++) {
-            for (let i = startX; i <= endX; i++) {
-                const tileType = this.grid[j][i];
-                if (tileTypes.includes(tileType)) {
-                    const dx = i - x;
-                    const dy = j - y;
-                    const distance = dx * dx + dy * dy;
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        nearest = { x: i, y: j, type: tileType };
-                    }
-                }
-            }
-        }
-        return nearest;
-    }
-
     getChunk(centerX, centerY, radius) {
         const chunk = [];
         const startX = Math.floor(centerX - radius);
@@ -355,85 +244,6 @@ export class Map {
             grid: chunk,
             origin: { x: startX, y: startY }
         };
-    }
-
-    getTallObjects(drawStartX, drawEndX, drawStartY, drawEndY) {
-        const tallObjects = [];
-        for (let j = drawStartY; j < drawEndY; j++) {
-            for (let i = drawStartX; i < drawEndX; i++) {
-                if (j < 0 || j >= this.height || i < 0 || i >= this.width) continue;
-                const tileType = this.grid[j] ? this.grid[j][i] : TILE_TYPE.GRASS;
-                if (tileType === TILE_TYPE.TREE) {
-                    tallObjects.push({
-                        type: 'tree',
-                        x: i,
-                        y: j,
-                        image: this.treeTile,
-                    });
-                }
-            }
-        }
-        return tallObjects;
-    }
-
-    renderBase(ctx, cameraX, cameraY, drawStartX, drawEndX, drawStartY, drawEndY) {
-        if (!this.grassTile || !this.grassTile.complete) return;
-
-        ctx.save();
-        
-        const ts = this.tileSize;
-
-        // Apply translation to keep drawing coordinates as integers, preventing seams.
-        ctx.translate(Math.round(-cameraX), Math.round(-cameraY));
-
-        // Iterate and draw ground-level tiles
-        for (let j = drawStartY; j < drawEndY; j++) {
-            for (let i = drawStartX; i < drawEndX; i++) {
-                if (j < 0 || j >= this.height || i < 0 || i >= this.width) continue;
-                // Draw base grass tile
-                ctx.drawImage(this.grassTile, i * ts, j * ts, ts, ts);
-
-                // Draw ground objects
-                const tileType = this.grid[j] ? this.grid[j][i] : TILE_TYPE.GRASS;
-                let objectImage = null;
-
-                switch (tileType) {
-                    case TILE_TYPE.LOGS: objectImage = this.logsTile; break;
-                    case TILE_TYPE.BUSHES: objectImage = this.bushesTile; break;
-                    case TILE_TYPE.FLOWER_PATCH: objectImage = this.flowerPatchTile; break;
-                }
-
-                if (objectImage && objectImage.complete) {
-                    ctx.drawImage(objectImage, i * ts, j * ts, ts, ts);
-                }
-            }
-        }
-        
-        // Draw grid lines
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Subtle grid lines
-        ctx.lineWidth = 1;
-
-        // Draw visible vertical lines
-        for (let i = drawStartX; i <= drawEndX; i++) {
-            if (i > this.width) continue; 
-            const x = i * ts;
-            ctx.beginPath();
-            ctx.moveTo(x, drawStartY * ts);
-            ctx.lineTo(x, drawEndY * ts);
-            ctx.stroke();
-        }
-
-        // Draw visible horizontal lines
-        for (let j = drawStartY; j <= drawEndY; j++) {
-            if (j > this.height) continue;
-            const y = j * ts;
-            ctx.beginPath();
-            ctx.moveTo(drawStartX * ts, y);
-            ctx.lineTo(drawEndX * ts, y);
-            ctx.stroke();
-        }
-
-        ctx.restore();
     }
 
     render(ctx, cameraX, cameraY) {
