@@ -82,7 +82,8 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             
             // Inflate the tree's hitbox slightly for interaction check.
             // This ensures that when collision stops the player, they are inside this interaction box.
-            const interactionPadding = 0.05; // A small padding in grid units
+            // Increased padding to robustly detect collision as interaction
+            const interactionPadding = 0.25; 
             const interactionHitbox = {
                 x: treeTrunkHitbox.x - interactionPadding,
                 y: treeTrunkHitbox.y - interactionPadding,

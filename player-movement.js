@@ -122,7 +122,7 @@ export function applyWiggle(player, gameMap) {
 
 export function applySeparation(player, allPlayers, gameMap) {
     const separationRadius = (1 / 2.5) * 2; // Player diameter in grid units
-    const separationForce = 0.005; // A small push force to avoid being too jerky
+    const separationForce = 0.02; // Increased force for responsive separation
     let totalPushX = 0;
     let totalPushY = 0;
     let neighbors = 0;
@@ -150,20 +150,25 @@ export function applySeparation(player, allPlayers, gameMap) {
         const avgPushX = (totalPushX / neighbors) * separationForce;
         const avgPushY = (totalPushY / neighbors) * separationForce;
 
-        const newPixelX = player.pixelX + avgPushX;
-        const newPixelY = player.pixelY + avgPushY;
+        const proposedX = player.pixelX + avgPushX;
+        const proposedY = player.pixelY + avgPushY;
 
-        // Check against map collision before applying the separation push
-        if (!gameMap.isPixelColliding(newPixelX, newPixelY)) {
-            player.pixelX = newPixelX;
-            player.pixelY = newPixelY;
-        } else {
-            // If pushing into a wall, try pushing only along one valid axis
-            if (!gameMap.isPixelColliding(newPixelX, player.pixelY)) {
-                player.pixelX = newPixelX;
-            } else if (!gameMap.isPixelColliding(player.pixelX, newPixelY)) {
-                player.pixelY = newPixelY;
-            }
+        // Apply separation with collision checks for walls
+        // We check X and Y independently to allow sliding along walls while being pushed
+
+        // Check X push
+        const tempPlayerX = { ...player, pixelX: proposedX, pixelY: player.pixelY };
+        const hitboxX = getPlayerHitbox(tempPlayerX);
+        if (!checkWorldCollision(hitboxX, gameMap)) {
+            player.pixelX = proposedX;
+        }
+
+        // Check Y push
+        // Use the potentially updated pixelX for the Y check to handle corners correctly
+        const tempPlayerY = { ...player, pixelX: player.pixelX, pixelY: proposedY };
+        const hitboxY = getPlayerHitbox(tempPlayerY);
+        if (!checkWorldCollision(hitboxY, gameMap)) {
+            player.pixelY = proposedY;
         }
     }
 }

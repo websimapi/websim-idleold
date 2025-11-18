@@ -86,13 +86,13 @@ function getNeighbors(x, y, map, endX, endY) {
         const isDestination = (newX === endX && newY === endY);
 
         if (newX >= 0 && newX < map.width && newY >= 0 && newY < map.height && (!map.isColliding(newX, newY) || isDestination)) {
-            // Allow diagonal movement even if one of the adjacent cardinal tiles is blocked.
-            // This allows "hugging" corners.
+            // Allow diagonal movement ONLY if BOTH adjacent cardinal tiles are free.
+            // This prevents cutting corners and getting stuck on hitboxes.
             if (dir.dx !== 0 && dir.dy !== 0) { // It's a diagonal move
                 const isObstacleX = map.isColliding(x + dir.dx, y);
                 const isObstacleY = map.isColliding(x, y + dir.dy);
-                // Only block diagonal if BOTH adjacent tiles that form the corner are obstacles.
-                if (!isObstacleX || !isObstacleY) {
+                
+                if (!isObstacleX && !isObstacleY) {
                     neighbors.push({ x: newX, y: newY });
                 }
             } else { // It's a cardinal move
