@@ -70,6 +70,18 @@ body, html {
     gap: 15px;
 }
 
+#remote-inventory-container #live-view-canvas {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background-color: #1a1a1a;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+
+#remote-inventory-container #live-view-content {
+    width: 100%;
+}
+
 #remote-inventory-container h2 {
     margin: 0 0 10px;
 }

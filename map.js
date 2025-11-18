@@ -229,6 +229,30 @@ export class Map {
         return nearest;
     }
 
+    getChunk(centerX, centerY, radius) {
+        const chunk = [];
+        const startX = Math.floor(centerX - radius);
+        const endX = Math.ceil(centerX + radius);
+        const startY = Math.floor(centerY - radius);
+        const endY = Math.ceil(centerY + radius);
+
+        for (let j = startY; j <= endY; j++) {
+            const row = [];
+            for (let i = startX; i <= endX; i++) {
+                if (j < 0 || j >= this.height || i < 0 || i >= this.width) {
+                    row.push(null); // Out of bounds
+                } else {
+                    row.push(this.grid[j][i]);
+                }
+            }
+            chunk.push(row);
+        }
+        return {
+            grid: chunk,
+            origin: { x: startX, y: startY }
+        };
+    }
+
     getTallObjects(drawStartX, drawEndX, drawStartY, drawEndY) {
         const tallObjects = [];
         for (let j = drawStartY; j < drawEndY; j++) {

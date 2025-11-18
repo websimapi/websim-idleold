@@ -1,9 +1,11 @@
 import * as DOM from './ui/dom-elements.js';
+import { LiveViewRenderer } from './live-view-renderer.js';
 
 let room = null;
 let hostClientId = null;
 let linkRequested = false;
 let isLinked = false;
+let liveViewRenderer = null;
 
 const STATUS = {
     INITIAL: 'initial',
@@ -16,6 +18,9 @@ const STATUS = {
 };
 
 function renderUI(state, data = {}) {
+    const contentContainer = document.getElementById('live-view-content');
+    if (!contentContainer) return;
+
     let content = '';
     switch (state) {
         case STATUS.INITIAL:
@@ -69,6 +74,11 @@ function renderUI(state, data = {}) {
                 </div>
                 <p><small>Your inventory will update automatically.</small></p>
             `;
+            if (!liveViewRenderer) {
+                const canvas = document.getElementById('live-view-canvas');
+                liveViewRenderer = new LiveViewRenderer(canvas);
+                liveViewRenderer.start();
+            }
             break;
         case STATUS.ERROR:
             content = `
@@ -78,7 +88,7 @@ function renderUI(state, data = {}) {
             `;
             break;
     }
-    DOM.remoteInventoryContainer.innerHTML = content;
+    contentContainer.innerHTML = content;
 }
 
 function updateInventoryDisplay(inventory) {
@@ -155,12 +165,15 @@ export async function initRemoteInventory() {
             } else if (data.type === 'link_success') {
                 isLinked = true;
                 renderUI(STATUS.LINKED, { username: data.username });
-            } else if (data.type === 'inventory_update') {
+            } else if (data.type === 'live_view_update') {
                 if (!isLinked) { // First inventory update also confirms a successful link
                     isLinked = true;
-                    renderUI(STATUS.LINKED, { username: 'Your' }); // Username might not be in this payload
+                    renderUI(STATUS.LINKED, { username: data.payload.playerState.username || 'Your' });
                 }
-                updateInventoryDisplay(data.inventory);
+                updateInventoryDisplay(data.payload.inventory);
+                if (liveViewRenderer) {
+                    liveViewRenderer.updateState(data.payload);
+                }
             }
         };
 

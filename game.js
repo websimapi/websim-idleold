@@ -33,6 +33,7 @@ export class Game {
         this.room = null;
         this.pendingLinks = new Map(); // code -> { clientId, expiry }
         this.linkedPlayers = new Map(); // twitchUserId -> clientId
+        this.liveViewUpdateTimer = 0;
 
         setEnergyCooldown(this.settings.energy.chat_cooldown_seconds);
 
@@ -156,6 +157,43 @@ export class Game {
             type: 'inventory_update',
             forClientId: clientId,
             inventory: inventoryData
+        });
+    }
+
+    sendLiveViewUpdate(player) {
+        if (!this.room || !player || !this.linkedPlayers.has(player.id)) return;
+
+        const clientId = this.linkedPlayers.get(player.id);
+        const inventoryData = {
+            logs: player.inventory.getLogCount(),
+            leaves: player.inventory.getTotalLeaves()
+        };
+
+        // Gather surrounding map data
+        const VIEW_RADIUS = 8;
+        const mapChunkData = this.map.getChunk(player.pixelX, player.pixelY, VIEW_RADIUS);
+
+        // Gather nearby players
+        const nearbyPlayers = [];
+        for (const otherPlayer of this.players.values()) {
+            if (otherPlayer.id !== player.id && otherPlayer.isPowered()) {
+                const dx = player.pixelX - otherPlayer.pixelX;
+                const dy = player.pixelY - otherPlayer.pixelY;
+                if (dx * dx + dy * dy < VIEW_RADIUS * VIEW_RADIUS) {
+                    nearbyPlayers.push(otherPlayer.getState());
+                }
+            }
+        }
+
+        this.room.send({
+            type: 'live_view_update',
+            forClientId: clientId,
+            payload: {
+                inventory: inventoryData,
+                playerState: player.getState(),
+                mapChunk: mapChunkData,
+                nearbyPlayers: nearbyPlayers,
+            }
         });
     }
 
@@ -377,11 +415,18 @@ export class Game {
 
         this.map.update(this.players);
 
+        this.liveViewUpdateTimer += deltaTime;
+        const shouldSendUpdate = this.liveViewUpdateTimer > (1 / 15); // 15 FPS updates
+
         for (const player of this.players.values()) {
             player.update(deltaTime, this.map, this.players, this);
-            if (this.linkedPlayers.has(player.id)) {
-                this.sendInventoryUpdate(player);
+            if (this.linkedPlayers.has(player.id) && shouldSendUpdate) {
+                this.sendLiveViewUpdate(player);
             }
+        }
+
+        if (shouldSendUpdate) {
+            this.liveViewUpdateTimer = 0;
         }
     }
     
