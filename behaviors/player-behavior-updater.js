@@ -76,20 +76,18 @@ export function updateAction(player, deltaTime, gameMap, allPlayers, game) {
             }
             updateFollowPath(player, deltaTime, gameMap);
             
-            // Check if player is now touching the tree trunk's interaction area.
+            // Check if player is now touching the tree trunk's collision area.
             const playerHitbox = getPlayerHitbox(player);
             const treeTrunkHitbox = getTreeTrunkHitbox(player.actionTarget.x, player.actionTarget.y);
-            
-            // Inflate the tree's hitbox slightly for interaction check.
-            // This ensures that when collision stops the player, they are inside this interaction box.
-            const interactionPadding = 0.25; 
-            const interactionHitbox = {
-                x: treeTrunkHitbox.x,
-                y: treeTrunkHitbox.y,
-                radius: treeTrunkHitbox.radius + interactionPadding
-            };
 
-            const isTouching = checkCircleCollision(playerHitbox, interactionHitbox);
+            // Start chopping when the player is sufficiently close to the tree trunk.
+            // Movement collision stops the player right at the edge of the trunk, so we
+            // add a small buffer so they don't need to "overlap" to start chopping.
+            const dxTree = playerHitbox.x - treeTrunkHitbox.x;
+            const dyTree = playerHitbox.y - treeTrunkHitbox.y;
+            const distSqTree = dxTree * dxTree + dyTree * dyTree;
+            const requiredDistance = playerHitbox.radius + treeTrunkHitbox.radius + 0.05; // small buffer
+            const isTouching = distSqTree <= requiredDistance * requiredDistance;
 
             if (isTouching) {
                 beginChopping(player, gameMap, game);
