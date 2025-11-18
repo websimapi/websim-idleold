@@ -68,6 +68,7 @@ export class Player {
         this.prevPixelX = 0; // For stuck detection
         this.prevPixelY = 0; // For stuck detection
         this.stuckTimer = 0; // For wiggle logic
+        this.isMovementBlocked = false; // For wiggle logic
 
         // For collision avoidance
         const angle = Math.random() * 2 * Math.PI;
@@ -161,6 +162,7 @@ export class Player {
             skills: this.skills.getState(),
             offsetX: this.offsetX,
             offsetY: this.offsetY,
+            isMovementBlocked: false, // Don't save this state
         };
     }
 
@@ -218,6 +220,7 @@ export class Player {
         this.actionTimer = state.actionTimer || 0;
         this.actionTotalTime = state.actionTotalTime || 0;
         this.stuckTimer = 0; // Don't load stuck state
+        this.isMovementBlocked = false; // Don't load stuck state
         
         // If restoring a chopping state, ensure the action target is valid.
         if (this.state === PLAYER_STATE.CHOPPING && !this.actionTarget) {
@@ -340,10 +343,9 @@ export class Player {
             updateAction(this, deltaTime, gameMap, allPlayers, game);
 
             // Stuck detection and wiggle
-            const isTryingToMove = this.state.startsWith('moving_to') || this.state === PLAYER_STATE.FOLLOWING || (this.state === PLAYER_STATE.IDLE && (this.targetX !== this.pixelX || this.targetY !== this.pixelY));
-            const distanceMoved = Math.sqrt((this.pixelX - this.prevPixelX)**2 + (this.pixelY - this.prevPixelY)**2);
+            const isTryingToMove = this.path.length > 0 || this.state === PLAYER_STATE.FOLLOWING;
             
-            if (isTryingToMove && distanceMoved < 0.02 * deltaTime * 60) { // Threshold scaled by nominal 60fps
+            if (isTryingToMove && this.isMovementBlocked) {
                 this.stuckTimer += deltaTime;
             } else {
                 this.stuckTimer = 0;

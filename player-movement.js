@@ -65,16 +65,17 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
 
         let proposedX = player.pixelX + moveX;
         let proposedY = player.pixelY + moveY;
-
-        // Store current position to detect if movement is blocked
-        // This is now handled in Player.update()
         
         const originalHitbox = getPlayerHitbox(player);
+        let moveBlockedX = false;
+        let moveBlockedY = false;
 
         // Check X-axis movement
         let hitboxX = { ...originalHitbox, x: proposedX + player.offsetX };
         if (!checkWorldCollision(hitboxX, gameMap)) {
             player.pixelX = proposedX;
+        } else {
+            moveBlockedX = true;
         }
 
         // Check Y-axis movement
@@ -83,10 +84,17 @@ export function updateMoveToTarget(player, deltaTime, gameMap) {
         let hitboxY = { ...currentHitbox, y: proposedY + player.offsetY };
         if (!checkWorldCollision(hitboxY, gameMap)) {
             player.pixelY = proposedY;
+        } else {
+            moveBlockedY = true;
         }
+
+        // The player is considered "blocked" if they intend to move but cannot move on EITHER axis.
+        // This prevents sliding along a wall from being counted as being stuck.
+        player.isMovementBlocked = moveBlockedX && moveBlockedY;
     } else {
         player.pixelX = player.targetX;
         player.pixelY = player.targetY;
+        player.isMovementBlocked = false;
     }
 }
 

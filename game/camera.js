@@ -37,8 +37,13 @@ export class Camera {
             const playerCenterX = focusedPlayer.pixelX * tileSize + tileSize / 2;
             const playerCenterY = focusedPlayer.pixelY * tileSize + tileSize / 2;
 
-            this.x = playerCenterX - this.canvas.width / 2;
-            this.y = playerCenterY - this.canvas.height / 2;
+            // Smoothly interpolate camera position
+            const lerpFactor = 1.0 - Math.exp(-10 * deltaTime); // Smooth damping
+            const targetX = playerCenterX - this.canvas.width / 2;
+            const targetY = playerCenterY - this.canvas.height / 2;
+
+            this.x += (targetX - this.x) * lerpFactor;
+            this.y += (targetY - this.y) * lerpFactor;
 
             if (mapPixelWidth > this.canvas.width) {
                 const maxCameraX = mapPixelWidth - this.canvas.width;
