@@ -82,6 +82,11 @@ export function initTwitch(channel, onChatter, onCommand) {
                 const targetUsername = parts.length > 2 ? parts[2].replace('@', '') : null;
                 onCommand(userId, 'energy', { amount, targetUsername });
             }
+        } else if (command === '!link') {
+            if (onCommand) {
+                const code = parts.length > 1 ? parts[1].trim() : null;
+                onCommand(userId, 'link', { code });
+            }
         }
     });
 }

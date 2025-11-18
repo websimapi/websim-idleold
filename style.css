@@ -9,16 +9,135 @@ body, html {
     font-family: sans-serif;
 }
 
-#connect-container {
+#main-container {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#view-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    background-color: transparent;
+    color: #aaa;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.tab-btn.active {
+    background-color: #5a3e8d;
+    color: white;
+    font-weight: bold;
+}
+
+.tab-content {
+    width: 100%;
+    max-width: 500px;
+}
+
+#connect-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     text-align: center;
     padding: 20px;
     box-sizing: border-box;
 }
+
+#remote-inventory-container {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+#remote-inventory-container h2 {
+    margin: 0 0 10px;
+}
+
+#remote-inventory-container p {
+    color: #ccc;
+    line-height: 1.5;
+}
+
+#request-link-btn {
+    padding: 12px 25px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+    margin-top: 10px;
+}
+
+#request-link-btn:hover {
+    background-color: #45a049;
+}
+
+#request-link-btn:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+.code-display {
+    background-color: #1a1a1a;
+    padding: 15px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: #ff8c00;
+    border: 1px dashed #555;
+    margin: 10px 0;
+}
+
+.inventory-display {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: #1a1a1a;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+
+.inventory-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 20px;
+}
+
+.inventory-item .label {
+    color: #ccc;
+}
+.inventory-item .value {
+    color: #f0f0f0;
+    font-weight: bold;
+}
+
 
 #connect-container h1 {
     margin-bottom: 10px;

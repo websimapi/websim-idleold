@@ -9,6 +9,7 @@ const STORAGE_KEY = 'twitch_channel_name';
 let startGameCallback;
 
 export function showGame(channel, worldName, hosts, settings) {
+    DOM.mainContainer.classList.add('hidden');
     DOM.worldSelectContainer.classList.add('hidden');
     DOM.gameContainer.classList.remove('hidden');
     if (startGameCallback) {
@@ -17,7 +18,7 @@ export function showGame(channel, worldName, hosts, settings) {
 }
 
 function showWorldSelect(channel) {
-    DOM.connectContainer.classList.add('hidden');
+    DOM.mainContainer.classList.add('hidden');
     DOM.worldSelectContainer.classList.remove('hidden');
     DOM.worldSelectTitle.textContent = `Worlds for #${channel}`;
     populateWorldList(channel);
@@ -25,6 +26,20 @@ function showWorldSelect(channel) {
 
 export function initUIManager(onStartGame) {
     startGameCallback = onStartGame;
+
+    DOM.connectTabBtn.addEventListener('click', () => {
+        DOM.inventoryTabBtn.classList.remove('active');
+        DOM.connectTabBtn.classList.add('active');
+        DOM.remoteInventoryContainer.classList.add('hidden');
+        DOM.connectContainer.classList.remove('hidden');
+    });
+
+    DOM.inventoryTabBtn.addEventListener('click', () => {
+        DOM.connectTabBtn.classList.remove('active');
+        DOM.inventoryTabBtn.classList.add('active');
+        DOM.connectContainer.classList.add('hidden');
+        DOM.remoteInventoryContainer.classList.remove('hidden');
+    });
 
     DOM.connectBtn.addEventListener('click', () => {
         const channel = DOM.channelInput.value.trim().toLowerCase();

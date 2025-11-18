@@ -29,6 +29,11 @@ export class Game {
         this.camera = new Camera(this.canvas, this.map, this.players);
         this.activeChoppingTargets = new Map();
 
+        // Realtime communication for remote inventory
+        this.room = null;
+        this.pendingLinks = new Map(); // code -> { clientId, expiry }
+        this.linkedPlayers = new Map(); // twitchUserId -> clientId
+
         setEnergyCooldown(this.settings.energy.chat_cooldown_seconds);
 
         this.resize();
@@ -41,6 +46,7 @@ export class Game {
     }
 
     async init() {
+        await this.initRealtime();
         await StorageManager.init(this.channel, this.worldName);
         const gameState = await StorageManager.loadGameState(this.channel, this.worldName);
 
@@ -73,6 +79,77 @@ export class Game {
         this.saveInterval = setInterval(async () => {
             await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
         }, 5000); // Save every 5 seconds
+    }
+
+    async initRealtime() {
+        if (this.room) return;
+        try {
+            const project = await window.websim.getCurrentProject();
+            const creator = await window.websim.getCreator();
+            const user = await window.websim.getCurrentUser();
+
+            // Only the project creator should act as the host
+            if (user.id !== creator.id) {
+                console.log("Not the project creator, real-time hosting disabled.");
+                return;
+            }
+
+            console.log("Project creator detected. Initializing real-time host...");
+            this.room = new WebsimSocket();
+            await this.room.initialize();
+            
+            // Announce that the host is online
+            this.room.send({ type: 'host_online', hostId: this.room.clientId });
+
+            this.room.onmessage = (event) => {
+                // The event 'from' property is deprecated, use clientId from the event data
+                if (event.data.type === 'request_link') {
+                    this.handleLinkRequest(event.data.clientId);
+                }
+            };
+        } catch (error) {
+            console.error("Failed to initialize real-time features:", error);
+        }
+    }
+
+    handleLinkRequest(clientId) {
+        if (!this.room) return;
+        
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        this.pendingLinks.set(code, { clientId, expiry: Date.now() + 5 * 60 * 1000 }); // 5 min expiry
+        
+        // Broadcast the code, the specific client will pick it up
+        this.room.send({ 
+            type: 'pairing_code', 
+            forClientId: clientId, 
+            code: code 
+        });
+        
+        console.log(`Generated pairing code ${code} for client ${clientId}`);
+        
+        // Clean up expired codes
+        setTimeout(() => {
+            if (this.pendingLinks.has(code)) {
+                this.pendingLinks.delete(code);
+                console.log(`Pairing code ${code} expired.`);
+            }
+        }, 5 * 60 * 1000);
+    }
+
+    sendInventoryUpdate(player) {
+        if (!this.room || !player || !this.linkedPlayers.has(player.id)) return;
+        
+        const clientId = this.linkedPlayers.get(player.id);
+        const inventoryData = {
+            logs: player.inventory.getLogCount(),
+            leaves: player.inventory.getTotalLeaves()
+        };
+        
+        this.room.send({
+            type: 'inventory_update',
+            forClientId: clientId,
+            inventory: inventoryData
+        });
     }
 
     resize() {
@@ -128,6 +205,42 @@ export class Game {
             
             targetPlayer.addEnergy(amount);
             console.log(`[Host] ${player.username} gave ${amount} energy to ${targetPlayer.username}.`);
+            return;
+        }
+
+        if (command === 'link') {
+            const code = args.code ? args.code.toUpperCase() : null;
+            if (this.room && code && this.pendingLinks.has(code)) {
+                const linkData = this.pendingLinks.get(code);
+
+                if (Date.now() > linkData.expiry) {
+                    console.log(`[${player.username}] tried to use expired code ${code}.`);
+                    this.pendingLinks.delete(code);
+                    return;
+                }
+                
+                // Unlink any old client associated with this twitch user
+                for (const [key, value] of this.linkedPlayers.entries()) {
+                    if (value === linkData.clientId) {
+                        this.linkedPlayers.delete(key);
+                    }
+                }
+
+                this.linkedPlayers.set(player.id, linkData.clientId);
+                this.pendingLinks.delete(code);
+
+                console.log(`[${player.username}] successfully linked their account with client ${linkData.clientId}.`);
+
+                this.room.send({
+                    type: 'link_success',
+                    forClientId: linkData.clientId,
+                    username: player.username
+                });
+                
+                this.sendInventoryUpdate(player);
+            } else {
+                console.log(`[${player.username}] tried to use invalid or non-existent code "${code}".`);
+            }
             return;
         }
 
@@ -259,6 +372,9 @@ export class Game {
 
         for (const player of this.players.values()) {
             player.update(deltaTime, this.map, this.players, this);
+            if (this.linkedPlayers.has(player.id)) {
+                this.sendInventoryUpdate(player);
+            }
         }
     }
     

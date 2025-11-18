@@ -14,14 +14,26 @@
     </script>
 </head>
 <body>
-    <div id="connect-container">
-        <h1>Twitch Chat Game</h1>
-        <p>Enter a Twitch channel name to connect to its chat.</p>
-        <div class="input-group">
-            <input type="text" id="channel-input" placeholder="e.g., ninja">
-            <button id="connect-btn">Connect</button>
+    <div id="main-container">
+        <div id="view-tabs">
+            <button id="connect-tab-btn" class="tab-btn active">Play / Host</button>
+            <button id="inventory-tab-btn" class="tab-btn">View My Inventory</button>
+        </div>
+
+        <div id="connect-container" class="tab-content active">
+            <h1>Twitch Chat Game</h1>
+            <p>Enter a Twitch channel name to connect to its chat.</p>
+            <div class="input-group">
+                <input type="text" id="channel-input" placeholder="e.g., ninja">
+                <button id="connect-btn">Connect</button>
+            </div>
+        </div>
+
+        <div id="remote-inventory-container" class="tab-content hidden">
+            <!-- This will be populated by remote-inventory.js -->
         </div>
     </div>
+
 
     <div id="world-select-container" class="hidden">
         <h1 id="world-select-title">Select a World</h1>
