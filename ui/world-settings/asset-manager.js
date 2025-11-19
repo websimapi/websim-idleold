@@ -1,13 +1,7 @@
 import * as StorageManager from '../../storage-manager.js';
-
-// Default assets mapping
-const ASSET_DEFINITIONS = [
-    { key: 'grass', label: 'Grass Tile (32x32)', defaultSrc: './grass_tile.png' },
-    { key: 'tree', label: 'Tree', defaultSrc: './tree.png' },
-    { key: 'logs', label: 'Logs', defaultSrc: './logs.png' },
-    { key: 'bushes', label: 'Bushes', defaultSrc: './bushes.png' },
-    { key: 'flowers', label: 'Flowers', defaultSrc: './flowers.png' }
-];
+import { ASSET_DEFINITIONS } from './assets/definitions.js';
+import { createGeneratedAssetsWheel } from './assets/generated-library.js';
+import { openGenerationModal } from './assets/generation-modal.js';
 
 export function initAssetManager(channel, worldName) {
     const container = document.getElementById('assets-list-container');
@@ -45,210 +39,24 @@ export function initAssetManager(channel, worldName) {
         saveGeneratedAssets();
     }
 
-    function renderGeneratedAssetsWheel() {
-        const wheel = document.createElement('div');
-        wheel.className = 'generated-assets-wheel';
-
-        const titleRow = document.createElement('div');
-        titleRow.className = 'generated-assets-header';
-        titleRow.innerHTML = `<span class="generated-assets-title">Generated Asset Library</span>`;
-
-        const strip = document.createElement('div');
-        strip.className = 'generated-assets-strip';
-
-        if (!generatedAssets || generatedAssets.length === 0) {
-            const emptyMsg = document.createElement('div');
-            emptyMsg.className = 'generated-assets-empty';
-            emptyMsg.textContent = 'No generated assets yet. Use "Generate New" to create custom art.';
-            strip.appendChild(emptyMsg);
-        } else {
-            generatedAssets.forEach(asset => {
-                const item = document.createElement('div');
-                item.className = 'generated-asset-item';
-                item.innerHTML = `
-                    <div class="generated-asset-thumb">
-                        <img src="${asset.url}" alt="${asset.prompt || 'Generated asset'}">
-                    </div>
-                    <button class="generated-asset-delete-btn" data-id="${asset.id}" title="Delete from library">✕</button>
-                `;
-                strip.appendChild(item);
-            });
-        }
-
-        wheel.appendChild(titleRow);
-        wheel.appendChild(strip);
-
-        // Bind delete handlers
-        wheel.querySelectorAll('.generated-asset-delete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = btn.dataset.id;
-                deleteGeneratedAsset(id);
-            });
-        });
-
-        return wheel;
-    }
-
-    function openGenerationModal(assetKey, assetLabel) {
-        const overlay = document.createElement('div');
-        overlay.className = 'asset-gen-overlay';
-
-        const modal = document.createElement('div');
-        modal.className = 'asset-gen-modal';
-
-        modal.innerHTML = `
-            <div class="asset-gen-header">
-                <h3>Generate New Image for "${assetLabel}"</h3>
-                <button class="asset-gen-close-btn" title="Close">✕</button>
-            </div>
-            <div class="asset-gen-body">
-                <label class="asset-gen-label">Describe the image you want:</label>
-                <textarea class="asset-gen-input" rows="3" placeholder="e.g. A darker forest tree with glowing runes..."></textarea>
-                <div class="asset-gen-status"></div>
-                <div class="asset-gen-preview-container">
-                    <div class="asset-gen-preview-placeholder">No image generated yet.</div>
-                    <img class="asset-gen-preview-img hidden" alt="Generated preview">
-                </div>
-            </div>
-            <div class="asset-gen-footer">
-                <button class="asset-gen-generate-btn">Generate</button>
-                <div class="asset-gen-spacer"></div>
-                <button class="asset-gen-accept-btn" disabled>Accept Override</button>
-                <button class="asset-gen-decline-btn" disabled>Decline Override</button>
-                <button class="asset-gen-delete-btn" disabled>Delete Generation</button>
-            </div>
-        `;
-
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-
-        const close = () => {
-            if (document.body.contains(overlay)) {
-                document.body.removeChild(overlay);
-            }
-        };
-
-        const closeBtn = modal.querySelector('.asset-gen-close-btn');
-        const generateBtn = modal.querySelector('.asset-gen-generate-btn');
-        const acceptBtn = modal.querySelector('.asset-gen-accept-btn');
-        const declineBtn = modal.querySelector('.asset-gen-decline-btn');
-        const deleteBtn = modal.querySelector('.asset-gen-delete-btn');
-        const promptInput = modal.querySelector('.asset-gen-input');
-        const statusEl = modal.querySelector('.asset-gen-status');
-        const previewImg = modal.querySelector('.asset-gen-preview-img');
-        const previewPlaceholder = modal.querySelector('.asset-gen-preview-placeholder');
-
-        let currentGenerated = null; // { id, url, prompt, createdAt }
-
-        closeBtn.addEventListener('click', close);
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                close();
-            }
-        });
-
-        generateBtn.addEventListener('click', async () => {
-            const prompt = (promptInput.value || '').trim();
-            if (!prompt) {
-                statusEl.textContent = 'Please enter a description first.';
-                statusEl.className = 'asset-gen-status asset-gen-status-error';
-                return;
-            }
-
-            // Reset current preview state
-            currentGenerated = null;
-            previewImg.classList.add('hidden');
-            previewPlaceholder.textContent = 'Generating image...';
-            statusEl.textContent = 'Generating with Flux Schnell (this may take around 10 seconds)...';
-            statusEl.className = 'asset-gen-status asset-gen-status-info';
-            acceptBtn.disabled = true;
-            declineBtn.disabled = true;
-            deleteBtn.disabled = true;
-            generateBtn.disabled = true;
-
-            try {
-                const result = await window.websim.imageGen({
-                    prompt,
-                    aspect_ratio: '1:1'
-                });
-
-                const fluxUrl = result && result.url;
-                if (!fluxUrl) {
-                    throw new Error('No URL returned from image generator.');
-                }
-
-                // Download the generated image and re-upload it to the project's file storage
-                statusEl.textContent = 'Downloading and storing generated image...';
-                const response = await fetch(fluxUrl);
-                if (!response.ok) {
-                    throw new Error('Failed to download generated image.');
-                }
-                const blob = await response.blob();
-                const fileName = `generated_${Date.now()}.png`;
-                const file = new File([blob], fileName, { type: blob.type || 'image/png' });
-
-                const uploadedUrl = await window.websim.upload(file);
-                if (!uploadedUrl) {
-                    throw new Error('Upload did not return a URL.');
-                }
-
-                const url = uploadedUrl;
-
-                currentGenerated = {
-                    id: `gen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                    url,
-                    prompt,
-                    createdAt: Date.now()
-                };
-
-                // Add to library immediately
-                generatedAssets.push(currentGenerated);
-                await saveGeneratedAssets();
-
-                previewImg.src = url;
-                previewImg.classList.remove('hidden');
-                previewPlaceholder.textContent = '';
-                statusEl.textContent = 'Image generated and stored successfully.';
-                statusEl.className = 'asset-gen-status asset-gen-status-success';
-
-                acceptBtn.disabled = false;
-                declineBtn.disabled = false;
-                deleteBtn.disabled = false;
-            } catch (err) {
-                console.error('Image generation failed:', err);
-                statusEl.textContent = 'Failed to generate and store image. Please try again.';
-                statusEl.className = 'asset-gen-status asset-gen-status-error';
-                previewImg.classList.add('hidden');
-                previewPlaceholder.textContent = 'No image generated yet.';
-            } finally {
-                generateBtn.disabled = false;
-            }
-        });
-
-        acceptBtn.addEventListener('click', async () => {
-            if (!currentGenerated) return;
-            await saveAsset(assetKey, currentGenerated.url);
-            close();
-        });
-
-        declineBtn.addEventListener('click', () => {
-            // Keep in library but do not assign; just close
-            close();
-        });
-
-        deleteBtn.addEventListener('click', async () => {
-            if (!currentGenerated) return;
-            deleteGeneratedAsset(currentGenerated.id);
-            close();
-        });
+    function handleGeneratedAssetCreated(assetMeta) {
+        generatedAssets.push(assetMeta);
+        saveGeneratedAssets();
     }
 
     function renderAssetsList() {
         container.innerHTML = '';
 
         // Generated assets wheel at the top
-        const wheel = renderGeneratedAssetsWheel();
+        const wheel = createGeneratedAssetsWheel({
+            generatedAssets,
+            onAssign: (assetKey, assetUrl) => {
+                saveAsset(assetKey, assetUrl);
+            },
+            onDelete: (id) => {
+                deleteGeneratedAsset(id);
+            }
+        });
         container.appendChild(wheel);
 
         const list = document.createElement('div');
@@ -257,6 +65,7 @@ export function initAssetManager(channel, worldName) {
         ASSET_DEFINITIONS.forEach(def => {
             const assetRow = document.createElement('div');
             assetRow.className = 'asset-row';
+            assetRow.dataset.assetKey = def.key;
 
             const currentSrc = currentAssets[def.key] || def.defaultSrc;
             const isOverridden = !!currentAssets[def.key];
@@ -274,10 +83,33 @@ export function initAssetManager(channel, worldName) {
                         Upload New
                         <input type="file" class="asset-file-input" data-key="${def.key}" accept="image/*" style="display: none;">
                     </label>
-                    <button class="generate-btn" data-key="${def.key}" data-label="${def.label}">Generate New</button>
+                    <button class="generate-btn" data-key="${def.key}" data-label="${def.label}" data-type="${def.type || ''}">Generate New</button>
                     ${isOverridden ? `<button class="reset-btn" data-key="${def.key}">Reset</button>` : ''}
                 </div>
             `;
+
+            // Allow dropping generated assets from the library onto this row
+            assetRow.addEventListener('dragover', (e) => {
+                if (e.dataTransfer && e.dataTransfer.types.includes('text/gen-asset-id')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    assetRow.classList.add('asset-row-drop-target');
+                }
+            });
+
+            assetRow.addEventListener('dragleave', () => {
+                assetRow.classList.remove('asset-row-drop-target');
+            });
+
+            assetRow.addEventListener('drop', (e) => {
+                const id = e.dataTransfer.getData('text/gen-asset-id');
+                assetRow.classList.remove('asset-row-drop-target');
+                if (!id) return;
+                const fromLibrary = generatedAssets.find(a => a.id === id);
+                if (!fromLibrary) return;
+                const key = assetRow.dataset.assetKey;
+                saveAsset(key, fromLibrary.url);
+            });
 
             list.appendChild(assetRow);
         });
@@ -292,7 +124,6 @@ export function initAssetManager(channel, worldName) {
 
                 const key = e.target.dataset.key;
 
-                // Feedback
                 const label = e.target.parentElement;
                 const originalText = label.firstChild.textContent;
                 label.firstChild.textContent = "Uploading...";
@@ -321,7 +152,22 @@ export function initAssetManager(channel, worldName) {
             btn.addEventListener('click', () => {
                 const key = btn.dataset.key;
                 const label = btn.dataset.label || key;
-                openGenerationModal(key, label);
+                const type = btn.dataset.type || '';
+
+                openGenerationModal({
+                    assetKey: key,
+                    assetLabel: label,
+                    assetType: type,
+                    onAccept: (url) => {
+                        saveAsset(key, url);
+                    },
+                    onGenerated: (assetMeta) => {
+                        handleGeneratedAssetCreated(assetMeta);
+                    },
+                    onDeleteGenerated: (id) => {
+                        deleteGeneratedAsset(id);
+                    }
+                });
             });
         });
     }
