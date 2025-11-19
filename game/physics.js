@@ -71,38 +71,54 @@ export function checkCircleRectCollision(circle, rect) {
 export function checkWorldCollision(hitbox, gameMap) {
     const isCircle = hitbox.radius !== undefined;
 
-    // Check collision with map boundaries
-    if (isCircle) {
-        if (hitbox.x - hitbox.radius < 0 || hitbox.x + hitbox.radius > gameMap.width ||
-            hitbox.y - hitbox.radius < 0 || hitbox.y + hitbox.radius > gameMap.height) {
-            return true;
-        }
-    } else { // is rect
-        if (hitbox.x < 0 || hitbox.x + hitbox.width > gameMap.width ||
-            hitbox.y < 0 || hitbox.y + hitbox.height > gameMap.height) {
-            return true;
-        }
-    }
+    // Collision with steep terrain
+    // We check the tile centers covered by the hitbox.
+    // If any covered tile has a height diff > 1 compared to the hitbox center's tile, it's a wall.
+    
+    // Rough center of hitbox
+    const cx = hitbox.x + (hitbox.width ? hitbox.width/2 : 0);
+    const cy = hitbox.y + (hitbox.height ? hitbox.height/2 : 0);
+    const currentH = gameMap.getHeight(cx, cy);
 
-    // Determine the grid range to check for potential colliders
-    const rectForRangeCheck = isCircle ? {
+    const rect = isCircle ? {
         x: hitbox.x - hitbox.radius,
         y: hitbox.y - hitbox.radius,
         width: hitbox.radius * 2,
         height: hitbox.radius * 2,
     } : hitbox;
 
+    const startX = Math.floor(rect.x);
+    const endX = Math.ceil(rect.x + rect.width);
+    const startY = Math.floor(rect.y);
+    const endY = Math.ceil(rect.y + rect.height);
 
-    const startX = Math.floor(rectForRangeCheck.x);
-    const endX = Math.ceil(rectForRangeCheck.x + rectForRangeCheck.width);
-    const startY = Math.floor(rectForRangeCheck.y);
-    const endY = Math.ceil(rectForRangeCheck.y + rectForRangeCheck.height);
-
-    // Check against trees in the vicinity
     for (let j = startY; j < endY; j++) {
         for (let i = startX; i < endX; i++) {
             if (i < 0 || i >= gameMap.width || j < 0 || j >= gameMap.height) {
-                continue;
+                return true; // Map bounds
+            }
+            
+            // Height check
+            const tileH = gameMap.getHeight(i, j);
+            if (Math.abs(tileH - currentH) > 1.5) { // Tolerance 1.5 allows step up 1
+                // We treat this tile as solid
+                // Standard AABB vs Tile check
+                const tileRect = { x: i, y: j, width: 1, height: 1 };
+                if (isCircle) {
+                     if (checkCircleRectCollision({x: i+0.5, y: j+0.5, radius: 0.7}, rect)) { // Approximate tile as circle/rect?
+                        // Simpler: Check collision with the tile square
+                        // checkCircleRectCollision logic helper
+                        const closestX = Math.max(i, Math.min(hitbox.x, i + 1));
+                        const closestY = Math.max(j, Math.min(hitbox.y, j + 1));
+                        const dx = hitbox.x - closestX;
+                        const dy = hitbox.y - closestY;
+                        if ((dx*dx + dy*dy) < (hitbox.radius*hitbox.radius)) return true;
+                     }
+                } else {
+                    // Rect vs Rect
+                    // Already overlapping due to loop range, so yes collision
+                    return true;
+                }
             }
 
             if (gameMap.grid[j][i] === TILE_TYPE.TREE) {

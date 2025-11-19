@@ -79,24 +79,34 @@ function getNeighbors(x, y, map, endX, endY) {
         { dx: 1, dy: 1 },   // down-right
     ];
 
+    const currentH = map.getHeight(x, y);
+
     for (const dir of directions) {
         const newX = x + dir.dx;
         const newY = y + dir.dy;
 
         const isDestination = (newX === endX && newY === endY);
 
-        if (newX >= 0 && newX < map.width && newY >= 0 && newY < map.height && (!map.isColliding(newX, newY) || isDestination)) {
-            // Allow diagonal movement ONLY if BOTH adjacent cardinal tiles are free.
-            // This prevents cutting corners and getting stuck on hitboxes.
-            if (dir.dx !== 0 && dir.dy !== 0) { // It's a diagonal move
-                const isObstacleX = map.isColliding(x + dir.dx, y);
-                const isObstacleY = map.isColliding(x, y + dir.dy);
-                
-                if (!isObstacleX && !isObstacleY) {
+        if (newX >= 0 && newX < map.width && newY >= 0 && newY < map.height) {
+            // Check height difference
+            const nextH = map.getHeight(newX, newY);
+            if (Math.abs(nextH - currentH) > 1) {
+                continue; // Too steep
+            }
+
+            if (!map.isColliding(newX, newY) || isDestination) {
+                // Allow diagonal movement ONLY if BOTH adjacent cardinal tiles are free.
+                // This prevents cutting corners and getting stuck on hitboxes.
+                if (dir.dx !== 0 && dir.dy !== 0) { // It's a diagonal move
+                    const isObstacleX = map.isColliding(x + dir.dx, y);
+                    const isObstacleY = map.isColliding(x, y + dir.dy);
+                    
+                    if (!isObstacleX && !isObstacleY) {
+                        neighbors.push({ x: newX, y: newY });
+                    }
+                } else { // It's a cardinal move
                     neighbors.push({ x: newX, y: newY });
                 }
-            } else { // It's a cardinal move
-                neighbors.push({ x: newX, y: newY });
             }
         }
     }

@@ -163,6 +163,7 @@ export class Player {
             offsetX: this.offsetX,
             offsetY: this.offsetY,
             isMovementBlocked: false, // Don't save this state
+            z: this.z || 0,
         };
     }
 
@@ -177,6 +178,7 @@ export class Player {
             this.x = Math.round(state.pixelX);
             this.y = Math.round(state.pixelY);
             this.isPositioned = true; // Loaded state implies positioned
+            this.z = state.z || 0;
         }
         
         this.path = state.path || [];
@@ -319,6 +321,12 @@ export class Player {
         // Store previous position for stuck detection
         this.prevPixelX = this.pixelX;
         this.prevPixelY = this.pixelY;
+
+        // Sync Z with map height
+        if (gameMap) {
+             // Snap to floor height. We could interpolate for smooth walking up ramps.
+             this.z = gameMap.getHeight(this.pixelX, this.pixelY);
+        }
 
         // Apply separation from other players to prevent overlap
         applySeparation(this, allPlayers, gameMap);

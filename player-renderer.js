@@ -124,12 +124,13 @@ function drawEnergyBar(ctx, player, screenX, usernameTagY, usernameFontSize) {
         let isDrainingCell = false;
 
         if (i < totalEnergyCells) {
-            const cellIndex = totalEnergyCells - 1 - i; 
+            // Cells fill from left to right; the rightmost filled slot is the draining cell.
+            const isLastFilledSlot = (i === totalEnergyCells - 1);
 
-            if (cellIndex === 0) {
+            if (isLastFilledSlot) {
                 block = PARTIAL_BLOCKS[partialBlockIndex];
                 isDrainingCell = true;
-            } else if (cellIndex > 0) {
+            } else {
                 block = FILLED_BLOCK;
             }
         } 
@@ -157,15 +158,10 @@ function drawEnergyBar(ctx, player, screenX, usernameTagY, usernameFontSize) {
 export function renderPlayer(ctx, player, tileSize, cameraX, cameraY, viewMode = '2d') {
     const radius = tileSize / 2.5;
     
-    // In 2D, pixelX/Y is top-left of sprite? No, logic uses it as coord.
-    // We want the center of the player visually.
-    // Player coord is (pixelX, pixelY) which is top-left of the tile unit usually?
-    // Previous code: screenX = (pixelX + offsetX) * tileSize - cameraX
-    // This implies pixelX is a float grid coordinate.
-    
-    // In 2.5D, we want the player to stand at that point.
-    // project() returns the point on the "ground".
-    const pos = project(player.pixelX + player.offsetX, player.pixelY + player.offsetY, 0, viewMode, tileSize);
+    // Use player.z if available, otherwise defaults to 0 inside project()
+    // Note: player object usually has z property added in update loop now.
+    const z = player.z || 0;
+    const pos = project(player.pixelX + player.offsetX, player.pixelY + player.offsetY, z, viewMode, tileSize);
     
     let screenX, screenY;
     

@@ -36,13 +36,27 @@ export function getSettingsHTML(worldName, settings) {
                         </div>
                     </div>
                     <div class="settings-section">
+                         <label>Terrain Generator</label>
+                         <p class="setting-desc">Configure and regenerate the terrain topography. <strong>Warning: This modifies the map structure!</strong></p>
+                         <div class="setting-item">
+                            <label for="terrain-scale">Noise Scale (Zoom)</label>
+                            <input type="number" id="terrain-scale" data-path="terrain.scale" value="${settings.terrain ? settings.terrain.scale : 20}" step="1">
+                         </div>
+                         <div class="setting-item">
+                            <label for="terrain-height">Height Multiplier</label>
+                            <input type="number" id="terrain-height" data-path="terrain.height_multiplier" value="${settings.terrain ? settings.terrain.height_multiplier : 0}" step="1">
+                         </div>
+                         <div class="setting-item">
+                            <label for="terrain-seed">Seed (Random if 0)</label>
+                            <input type="number" id="terrain-seed" data-path="terrain.seed" value="${settings.terrain ? settings.terrain.seed : 12345}">
+                         </div>
+                         <button class="regen-btn" id="regenerate-terrain-btn" style="margin-top: 10px; border-color: #4a8cff; color: #9dc0ff;">Regenerate Terrain</button>
+                    </div>
+                    <div class="settings-section">
                         <label>Visuals</label>
                         <div class="setting-item">
-                            <label for="view_mode">View Mode</label>
-                            <select id="view_mode" data-path="visuals.view_mode" style="padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
-                                <option value="2d" ${settings.visuals && settings.visuals.view_mode === '2d' ? 'selected' : ''}>2D Top-Down</option>
-                                <option value="2.5d" ${settings.visuals && settings.visuals.view_mode === '2.5d' ? 'selected' : ''}>2.5D Isometric</option>
-                            </select>
+                            <label for="render_distance">Render Distance</label>
+                            <input type="number" id="render_distance" data-path="visuals.render_distance" value="${settings.visuals ? settings.visuals.render_distance : 30}" step="1" min="10" max="100">
                         </div>
                         <div class="setting-item">
                             <input type="checkbox" id="show_target_indicator" data-path="visuals.show_target_indicator" ${settings.visuals && settings.visuals.show_target_indicator ? 'checked' : ''}>

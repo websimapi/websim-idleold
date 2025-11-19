@@ -5,22 +5,37 @@ import { project } from '../game/projection.js';
 export class MapRenderer {
     constructor(map) {
         this.map = map;
+        // Cached pattern for tiling the grass texture over the height mesh
+        this.grassPattern = null;
+        // Track the tileSize used to build the pattern so we can rebuild on zoom changes
+        this.grassPatternTileSize = null;
+        // Offscreen canvas used to scale the grass texture to the current tile size
+        this.grassPatternCanvas = null;
     }
 
     getTallObjects(drawStartX, drawEndX, drawStartY, drawEndY) {
-        // Note: draw ranges might be loose in 2.5D, so we might check bounds strictly here if needed
         const tallObjects = [];
         for (let j = drawStartY; j < drawEndY; j++) {
             for (let i = drawStartX; i < drawEndX; i++) {
                 if (j < 0 || j >= this.map.height || i < 0 || i >= this.map.width) continue;
                 const tileType = this.map.grid[j] ? this.map.grid[j][i] : TILE_TYPE.GRASS;
+                const z = this.map.getHeight(i + 0.5, j + 0.5);
+                
                 if (tileType === TILE_TYPE.TREE) {
                     tallObjects.push({
                         type: 'tree',
                         x: i,
                         y: j,
-                        z: 0, // Base height
+                        z: z, 
                         image: this.map.treeTile,
+                    });
+                } else if (tileType === TILE_TYPE.LOGS || tileType === TILE_TYPE.BUSHES) {
+                    tallObjects.push({
+                         type: tileType === TILE_TYPE.LOGS ? 'logs' : 'bushes',
+                         x: i,
+                         y: j,
+                         z: z,
+                         image: tileType === TILE_TYPE.LOGS ? this.map.logsTile : this.map.bushesTile
                     });
                 }
             }
@@ -34,86 +49,140 @@ export class MapRenderer {
         ctx.save();
         
         const ts = this.map.tileSize;
-        
-        // For 2.5D ground rendering, we can use a transform to skew the images
-        // This allows us to draw "flat" tiles that look isometric.
+
+        ctx.translate(-cameraX, -cameraY);
+
+        // Ensure we have a repeating pattern for the grass texture (used in 2.5D mesh fill)
         if (viewMode === '2.5d') {
-            // In our projection:
-            // x_screen = (x - y) * 0.5 * ts
-            // y_screen = (x + y) * 0.25 * ts
-            //
-            // Matrix transform T:
-            // T(1, 0) -> (0.5*ts, 0.25*ts)
-            // T(0, 1) -> (-0.5*ts, 0.25*ts)
-            //
-            // setTransform(a, b, c, d, e, f)
-            // x' = ax + cy + e
-            // y' = bx + dy + f
-            
-            // Snap camera translation to whole pixels to reduce subpixel shimmering
-            const snappedCameraX = Math.round(cameraX);
-            const snappedCameraY = Math.round(cameraY);
-            ctx.translate(-snappedCameraX, -snappedCameraY);
-            
-            ctx.transform(0.5, 0.25, -0.5, 0.25, 0, 0);
-            
-            // Now we can just draw the map as if it were 2D orthogonal, but we need to scale
-            // the drawing coordinates because the matrix above takes pixel coords and squashes them.
-            // Wait, if we draw at (i*ts, j*ts), the matrix applies to that vector.
-            // Vector (ts, 0) -> (0.5*ts, 0.25*ts). Perfect.
-            
-            // However, the grass tile is square. If we skew it, it looks like a diamond.
-            // This creates the ground plane.
-        } else {
-             // 2D Mode
-             ctx.translate(Math.round(-cameraX), Math.round(-cameraY));
+            // (Re)build pattern whenever tileSize changes so one repeat maps to one grid tile
+            if (!this.grassPattern || this.grassPatternTileSize !== ts) {
+                this.grassPatternTileSize = ts;
+
+                // Create / reuse offscreen canvas sized to current tileSize
+                if (!this.grassPatternCanvas) {
+                    this.grassPatternCanvas = document.createElement('canvas');
+                }
+                const off = this.grassPatternCanvas;
+                off.width = ts;
+                off.height = ts;
+
+                const offCtx = off.getContext('2d');
+                // Disable smoothing for crisp pixels when scaling the source tile
+                const prevSmoothing = offCtx.imageSmoothingEnabled;
+                offCtx.imageSmoothingEnabled = false;
+                offCtx.clearRect(0, 0, ts, ts);
+                // Draw the base grass tile stretched/shrunk to exactly one grid tile
+                offCtx.drawImage(this.map.grassTile, 0, 0, ts, ts);
+                offCtx.imageSmoothingEnabled = prevSmoothing;
+
+                this.grassPattern = ctx.createPattern(off, 'repeat');
+            }
         }
 
-        // Iterate and draw ground-level tiles
-        // We expand the drawing loop to avoid edge artifacts in 2.5D
-        const pad = viewMode === '2.5d' ? 2 : 0;
-        
-        for (let j = drawStartY - pad; j < drawEndY + pad; j++) {
-            for (let i = drawStartX - pad; i < drawEndX + pad; i++) {
-                if (j < 0 || j >= this.map.height || i < 0 || i >= this.map.width) continue;
-                
-                // Draw base grass tile
-                // To prevent seams in 2.5D with transforms, we slightly overlap or ensure integers?
-                // Canvas transforms handle subpixels.
-                ctx.drawImage(this.map.grassTile, i * ts, j * ts, ts, ts);
+        // Expand range slightly to cover projection overlap
+        const pad = 4;
+        const safeStartX = Math.max(0, drawStartX - pad);
+        const safeEndX = Math.min(this.map.width, drawEndX + pad);
+        const safeStartY = Math.max(0, drawStartY - pad);
+        const safeEndY = Math.min(this.map.height, drawEndY + pad);
 
-                // Draw ground objects (logs, bushes, flowers)
-                // These are "flat" on the ground, so they share the transform in 2.5D
-                // But wait! The prompt says "assets stand up like paper style".
-                // Logs/Bushes/Flowers might be considered "flat" or "standing".
-                // Usually in Don't Starve/Paper Mario, bushes stand up.
-                // If they stand up, they should NOT be drawn with the ground skew transform.
-                // They should be drawn in the entity pass (renderYSorted).
-                // Currently, they are drawn here in renderBase.
+        for (let j = safeStartY; j < safeEndY; j++) {
+            for (let i = safeStartX; i < safeEndX; i++) {
+                // Sample height at tile center so slopes are smooth
+                const h = this.map.getHeight(i + 0.5, j + 0.5);
+                const tileType = this.map.grid[j][i]; // NEW: reuse tile type in both modes
                 
-                // IF we want them to stand up, we must move them to renderYSorted logic in game/renderer.js
-                // IF we want them flat (like a rug), we draw them here.
+                const pos = project(i, j, h, viewMode, ts);
                 
-                // Actually, the easiest way to make them "stand up" is to NOT draw them in this transformed context,
-                // but draw them in the entity pass.
-                
-                // Let's modify this loop to ONLY draw flat things (Grass, Flowers).
-                // Logs and Bushes should be treated as entities in 2.5D mode.
-                
-                const tileType = this.map.grid[j] ? this.map.grid[j][i] : TILE_TYPE.GRASS;
-                
-                if (tileType === TILE_TYPE.FLOWER_PATCH) {
-                     ctx.drawImage(this.map.flowerPatchTile, i * ts, j * ts, ts, ts);
-                } else if (viewMode === '2d') {
-                    // In 2D, we draw logs/bushes here as before (flat layer)
-                    if (tileType === TILE_TYPE.LOGS) ctx.drawImage(this.map.logsTile, i * ts, j * ts, ts, ts);
-                    if (tileType === TILE_TYPE.BUSHES) ctx.drawImage(this.map.bushesTile, i * ts, j * ts, ts, ts);
+                if (viewMode === '2.5d') {
+                    // --- Render height-mapped quad with repeating grass texture ---
+
+                    // Heights at the four grid corners of this cell
+                    const h00 = this.map.getHeight(i,     j);
+                    const h10 = this.map.getHeight(i + 1, j);
+                    const h11 = this.map.getHeight(i + 1, j + 1);
+                    const h01 = this.map.getHeight(i,     j + 1);
+
+                    // Project the four corners
+                    const p00 = project(i,     j,     h00, viewMode, ts);
+                    const p10 = project(i + 1, j,     h10, viewMode, ts);
+                    const p11 = project(i + 1, j + 1, h11, viewMode, ts);
+                    const p01 = project(i,     j + 1, h01, viewMode, ts);
+
+                    // Build a clip path for this height-mapped quad
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(p00.x, p00.y);
+                    ctx.lineTo(p10.x, p10.y);
+                    ctx.lineTo(p11.x, p11.y);
+                    ctx.lineTo(p01.x, p01.y);
+                    ctx.closePath();
+                    ctx.clip();
+
+                    if (this.grassPattern) {
+                        // Fill with repeating grass texture; pattern cell already matches one grid tile
+                        ctx.fillStyle = this.grassPattern;
+
+                        // Conservative bounding box for this quad
+                        const minX = Math.min(p00.x, p10.x, p11.x, p01.x);
+                        const maxX = Math.max(p00.x, p10.x, p11.x, p01.x);
+                        const minY = Math.min(p00.y, p10.y, p11.y, p01.y);
+                        const maxY = Math.max(p00.y, p10.y, p11.y, p01.y);
+
+                        const drawX = Math.floor(minX) - ts;
+                        const drawY = Math.floor(minY) - ts;
+                        const drawW = Math.ceil((maxX - minX) + ts * 2);
+                        const drawH = Math.ceil((maxY - minY) + ts * 2);
+
+                        ctx.fillRect(drawX, drawY, drawW, drawH);
+
+                        // NEW: overlay flower patch texture flat on the same quad so it conforms to the slope
+                        if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
+                            // Draw flowers at a per-tile scale instead of stretching across the whole quad
+                            // Position roughly at the quad center to keep them visually aligned with the tile
+                            const centerX = (p00.x + p10.x + p11.x + p01.x) / 4;
+                            const centerY = (p00.y + p10.y + p11.y + p01.y) / 4;
+                            const flowerDrawX = Math.round(centerX - ts / 2);
+                            const flowerDrawY = Math.round(centerY - ts / 2);
+                            ctx.drawImage(this.map.flowerPatchTile, flowerDrawX, flowerDrawY, ts, ts);
+                        }
+                    } else {
+                        // Fallback flat color if pattern is unavailable
+                        const avgH = (h00 + h10 + h11 + h01) * 0.25;
+                        const baseLight = 80;
+                        const extra = Math.max(0, Math.min(20, avgH * 4));
+                        const lightness = baseLight + extra;
+                        ctx.fillStyle = `hsl(110, 40%, ${lightness}%)`;
+                        ctx.fill();
+                    }
+                    ctx.restore();
+
+                    // REMOVED OLD 2.5D flower sprite overlay here to avoid misaligned billboards
+
+                } else {
+                    // 2D
+                    const drawX = i * ts;
+                    const drawY = j * ts;
+                    ctx.drawImage(this.map.grassTile, drawX, drawY, ts, ts);
+                    if (tileType === TILE_TYPE.FLOWER_PATCH && this.map.flowerPatchTile && this.map.flowerPatchTile.complete) {
+                        ctx.drawImage(this.map.flowerPatchTile, drawX, drawY, ts, ts);
+                    }
+                    if (tileType === TILE_TYPE.LOGS && this.map.logsTile && this.map.logsTile.complete) {
+                        ctx.drawImage(this.map.logsTile, drawX, drawY, ts, ts);
+                    }
+                    if (tileType === TILE_TYPE.BUSHES && this.map.bushesTile && this.map.bushesTile.complete) {
+                        ctx.drawImage(this.map.bushesTile, drawX, drawY, ts, ts);
+                    }
+
+                    // Very subtle height tint in 2D so terrain isn't visually flat
+                    if (h > 0) {
+                        const alpha = Math.min(0.4, h * 0.05);
+                        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                        ctx.fillRect(drawX, drawY, ts, ts);
+                    }
                 }
             }
         }
-        
-        // NOTE: Grid line rendering has been removed to avoid visible grid lines in both 2D and 2.5D views.
-        // Previously, subtle grid lines were drawn here; they are now intentionally omitted.
 
         ctx.restore();
     }

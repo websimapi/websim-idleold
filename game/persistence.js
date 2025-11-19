@@ -40,6 +40,7 @@ export function savePlayers(players, playersStorageKey) {
 export function saveMap(gameMap, mapStorageKey) {
     const mapData = {
         grid: gameMap.grid,
+        heightGrid: gameMap.heightGrid, // Save height grid
         treeRespawns: gameMap.treeRespawns
     };
     try {
@@ -56,6 +57,11 @@ export function loadMap(gameMap, mapStorageKey) {
         if (data) {
             const mapData = JSON.parse(data);
             gameMap.grid = mapData.grid;
+            gameMap.heightGrid = mapData.heightGrid || []; // Load height grid
+            if (!gameMap.heightGrid.length) {
+                // Init if missing (legacy saves)
+                gameMap.heightGrid = Array(gameMap.height).fill(0).map(() => Array(gameMap.width).fill(0));
+            }
             gameMap.treeRespawns = mapData.treeRespawns || [];
             console.log(`[Persistence] Loaded map data from localStorage.`);
         } else {

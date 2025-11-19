@@ -72,6 +72,21 @@ export function showWorldSettings(channel, worldName) {
         }
     });
 
+    document.getElementById('regenerate-terrain-btn').addEventListener('click', () => {
+         if (confirm(`Are you sure you want to regenerate the terrain for "${renameManager.getCurrentWorldName()}"?\n\nThis will overwrite the existing height map. Trees and other objects will remain at their X/Y coordinates but their height will shift. Players may need to move if stuck.`)) {
+            // Fetch latest values from inputs
+            const scale = parseFloat(document.getElementById('terrain-scale').value) || 20;
+            const heightMult = parseFloat(document.getElementById('terrain-height').value) || 0;
+            const seed = parseFloat(document.getElementById('terrain-seed').value) || 0;
+            
+            regenerateMapFeature(channel, renameManager.getCurrentWorldName(), 'terrain', {
+                scale,
+                height_multiplier: heightMult,
+                seed: seed === 0 ? Math.random() : seed
+            });
+        }
+    });
+
     playBtn.addEventListener('click', async () => {
         await renameManager.handleRename(); // Save name change on play, if any
         const currentWorldName = renameManager.getCurrentWorldName();

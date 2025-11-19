@@ -12,7 +12,9 @@ export class Map {
         this.logsTile = null;
         this.bushesTile = null;
         this.flowerPatchTile = null;
+        this.dirtTile = null; // New dirt asset
         this.grid = [];
+        this.heightGrid = []; // New height grid
         this.treeRespawns = [];
         this.viewportWidth = 0;
         this.viewportHeight = 0;
@@ -57,7 +59,8 @@ export class Map {
             tree: overrides.tree || './tree.png',
             logs: overrides.logs || './logs.png',
             bushes: overrides.bushes || './bushes.png',
-            flowers: overrides.flowers || './flowers.png'
+            flowers: overrides.flowers || './flowers.png',
+            dirt: overrides.dirt || './dirt.png'
         };
 
         await Promise.all([
@@ -65,7 +68,8 @@ export class Map {
             loadTile(assets.tree).then(img => this.treeTile = img),
             loadTile(assets.logs).then(img => this.logsTile = img),
             loadTile(assets.bushes).then(img => this.bushesTile = img),
-            loadTile(assets.flowers).then(img => this.flowerPatchTile = img)
+            loadTile(assets.flowers).then(img => this.flowerPatchTile = img),
+            loadTile(assets.dirt).then(img => this.dirtTile = img)
         ]);
         
         console.log("Map assets loaded with overrides:", overrides);
@@ -109,16 +113,53 @@ export class Map {
     generateMap() {
         console.log(`Generating map of size ${this.width}x${this.height}.`);
         this.grid = [];
+        this.heightGrid = [];
         for (let j = 0; j < this.height; j++) {
             this.grid[j] = [];
+            this.heightGrid[j] = [];
             for (let i = 0; i < this.width; i++) {
                 this.grid[j][i] = TILE_TYPE.GRASS;
+                // Initialize height to 0 as a float so terrain generation can fill with smooth values
+                this.heightGrid[j][i] = 0;
             }
         }
         this._generateTrees(this.grid);
         this._generateFlowers(this.grid);
     }
     
+    getHeight(x, y) {
+        // Bilinear interpolation over heightGrid so we get smooth slopes
+        if (!this.heightGrid || this.heightGrid.length === 0) return 0;
+
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = x0 + 1;
+        const y1 = y0 + 1;
+
+        // Clamp indices to valid range
+        const clampX = (v) => Math.max(0, Math.min(this.width - 1, v));
+        const clampY = (v) => Math.max(0, Math.min(this.height - 1, v));
+
+        const cx0 = clampX(x0);
+        const cx1 = clampX(x1);
+        const cy0 = clampY(y0);
+        const cy1 = clampY(y1);
+
+        const h00 = this.heightGrid[cy0] && this.heightGrid[cy0][cx0] != null ? this.heightGrid[cy0][cx0] : 0;
+        const h10 = this.heightGrid[cy0] && this.heightGrid[cy0][cx1] != null ? this.heightGrid[cy0][cx1] : h00;
+        const h01 = this.heightGrid[cy1] && this.heightGrid[cy1][cx0] != null ? this.heightGrid[cy1][cx0] : h00;
+        const h11 = this.heightGrid[cy1] && this.heightGrid[cy1][cx1] != null ? this.heightGrid[cy1][cx1] : h00;
+
+        const fx = Math.max(0, Math.min(1, x - x0));
+        const fy = Math.max(0, Math.min(1, y - y0));
+
+        const h0 = h00 + (h10 - h00) * fx;
+        const h1 = h01 + (h11 - h01) * fx;
+        const h = h0 + (h1 - h0) * fy;
+
+        return h || 0;
+    }
+
     regenerateTrees() {
         // Clear existing trees
         for (let j = 0; j < this.height; j++) {
@@ -238,6 +279,7 @@ export class Map {
 
     getChunk(centerX, centerY, radius) {
         const chunk = [];
+        const heightChunk = [];
         const startX = Math.floor(centerX - radius);
         const endX = Math.ceil(centerX + radius);
         const startY = Math.floor(centerY - radius);
@@ -245,17 +287,22 @@ export class Map {
 
         for (let j = startY; j <= endY; j++) {
             const row = [];
+            const heightRow = [];
             for (let i = startX; i <= endX; i++) {
                 if (j < 0 || j >= this.height || i < 0 || i >= this.width) {
                     row.push(null); // Out of bounds
+                    heightRow.push(0);
                 } else {
                     row.push(this.grid[j][i]);
+                    heightRow.push(this.getHeight(i, j)); // Capture exact height at grid center/corner
                 }
             }
             chunk.push(row);
+            heightChunk.push(heightRow);
         }
         return {
             grid: chunk,
+            heightGrid: heightChunk,
             origin: { x: startX, y: startY }
         };
     }
