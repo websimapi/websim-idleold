@@ -39,22 +39,36 @@ export class Map {
         this.tileSize = size;
     }
 
-    async loadAssets() {
+    async loadAssets(overrides = {}) {
         const loadTile = (src) => new Promise((resolve) => {
             const img = new Image();
+            // If cross-origin issues arise with user uploads, might need: img.crossOrigin = "Anonymous";
+            img.crossOrigin = "Anonymous"; 
             img.src = src;
             img.onload = () => resolve(img);
+            img.onerror = () => {
+                console.error(`Failed to load image: ${src}`);
+                resolve(null); // Resolve with null so Promise.all doesn't fail completely
+            };
         });
 
+        const assets = {
+            grass: overrides.grass || './grass_tile.png',
+            tree: overrides.tree || './tree.png',
+            logs: overrides.logs || './logs.png',
+            bushes: overrides.bushes || './bushes.png',
+            flowers: overrides.flowers || './flowers.png'
+        };
+
         await Promise.all([
-            loadTile('./grass_tile.png').then(img => this.grassTile = img),
-            loadTile('./tree.png').then(img => this.treeTile = img),
-            loadTile('./logs.png').then(img => this.logsTile = img),
-            loadTile('./bushes.png').then(img => this.bushesTile = img),
-            loadTile('./flowers.png').then(img => this.flowerPatchTile = img)
+            loadTile(assets.grass).then(img => this.grassTile = img),
+            loadTile(assets.tree).then(img => this.treeTile = img),
+            loadTile(assets.logs).then(img => this.logsTile = img),
+            loadTile(assets.bushes).then(img => this.bushesTile = img),
+            loadTile(assets.flowers).then(img => this.flowerPatchTile = img)
         ]);
         
-        // Generation is now handled after loading data.
+        console.log("Map assets loaded with overrides:", overrides);
     }
     
     _generateTrees(grid) {

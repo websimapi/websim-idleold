@@ -32,6 +32,8 @@ export class Game {
         this.map = new GameMap(this.baseTileSize); // TileSize is 32
         this.camera = new Camera(this.canvas, this.map, this.players, this.settings);
         this.activeChoppingTargets = new Map();
+        
+        this.assets = {}; // Store assets overrides
 
         // Realtime communication for remote inventory
         this.room = null;
@@ -52,7 +54,8 @@ export class Game {
         }, { passive: false });
         
         this.saveInterval = setInterval(async () => {
-            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
+            // Pass this.assets to saveGameState
+            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets);
         }, 5000); // Save every 5 seconds
     }
 
@@ -62,6 +65,9 @@ export class Game {
 
         await StorageManager.init(this.channel, this.worldName);
         const gameState = await StorageManager.loadGameState(this.channel, this.worldName);
+
+        // Load assets overrides from saved state
+        this.assets = gameState.assets || {};
 
         if (gameState.map && gameState.map.grid && gameState.map.grid.length > 0) {
             this.map.grid = gameState.map.grid;
@@ -158,10 +164,20 @@ export class Game {
     }
 
     start() {
-        this.map.loadAssets().then(async () => {
-            await this.init(); // Use the new async init
-            this.lastTime = performance.now();
-            this.gameLoop();
+        // We first need to init to get the assets overrides, THEN load assets.
+        // But init also loads the map data which we might want before rendering.
+        // Map.loadAssets handles image loading.
+        
+        // New flow:
+        // 1. Init storage/game state (getting assets overrides)
+        // 2. Map.loadAssets(overrides)
+        // 3. Start loop
+
+        this.init().then(() => {
+            this.map.loadAssets(this.assets).then(() => {
+                this.lastTime = performance.now();
+                this.gameLoop();
+            });
         });
     }
 

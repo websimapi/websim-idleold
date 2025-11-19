@@ -7,6 +7,7 @@ import { initAdminManager } from './world-settings/admin-manager.js';
 import { initDeleteWorld } from './world-settings/delete-world.js';
 import { initRenameWorld } from './world-settings/rename-world.js';
 import { initSettingsUpdater } from './world-settings/settings-updater.js';
+import { initAssetManager } from './world-settings/asset-manager.js';
 
 export function showWorldSettings(channel, worldName) {
     const settings = loadSettings(channel, worldName);
@@ -17,11 +18,29 @@ export function showWorldSettings(channel, worldName) {
     const worldNameInputEl = document.getElementById('world-name-input');
     const playBtn = document.getElementById('play-btn');
 
+    // --- Tab Switching Logic ---
+    const tabs = DOM.worldSettingsContainer.querySelectorAll('.settings-tab');
+    const contents = DOM.worldSettingsContainer.querySelectorAll('.settings-tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Deactivate all
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => c.classList.remove('active'));
+
+            // Activate clicked
+            tab.classList.add('active');
+            const targetId = `tab-${tab.dataset.target}`;
+            document.getElementById(targetId).classList.add('active');
+        });
+    });
+
     // --- Module Initializations ---
     const renameManager = initRenameWorld(channel, worldName, worldNameInputEl);
     const adminManager = initAdminManager(channel, worldName);
     initSettingsUpdater(channel, worldName, settings);
     initDeleteWorld(channel, renameManager.getCurrentWorldName);
+    initAssetManager(channel, worldName); // Initialize Asset Manager
 
     // --- Remaining Logic ---
 
