@@ -231,6 +231,8 @@ export class Game {
 
     update(deltaTime) {
         this.camera.update(deltaTime);
+        // Keep audio listener at the camera focus so proximity audio works correctly
+        AudioManager.setListenerPosition(this.camera.x, this.camera.y, this.baseTileSize);
         updateActiveChopping(this, deltaTime);
 
         this.map.update(this.players);
