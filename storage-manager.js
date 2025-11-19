@@ -67,7 +67,7 @@ export async function init(channel, worldName) {
     }
 }
 
-export async function saveGameState(channel, worldName, players, map, assets) {
+export async function saveGameState(channel, worldName, players, map, assets, generatedAssets) {
     const worldKey = `${channel}/${worldName}`;
     const playersState = {};
     for (const [id, player] of players.entries()) {
@@ -78,12 +78,6 @@ export async function saveGameState(channel, worldName, players, map, assets) {
         treeRespawns: map.treeRespawns,
     };
 
-    // Construct save object. If assets are provided, save them.
-    // If not provided, we ideally shouldn't overwrite them with undefined,
-    // but Game always passes current state. 
-    // To be safe, we can read current assets if not passed, but that's expensive loop.
-    // Better: Game MUST pass assets.
-    
     const dataToSave = {
         players: playersState,
         map: mapState
@@ -92,10 +86,18 @@ export async function saveGameState(channel, worldName, players, map, assets) {
     if (assets) {
         dataToSave.assets = assets;
     } else {
-        // If assets arg is missing, try to preserve existing assets
         const existing = await idb.get('worlds', worldKey);
         if (existing && existing.assets) {
             dataToSave.assets = existing.assets;
+        }
+    }
+
+    if (generatedAssets) {
+        dataToSave.assetsGenerated = generatedAssets;
+    } else {
+        const existing = await idb.get('worlds', worldKey);
+        if (existing && existing.assetsGenerated) {
+            dataToSave.assetsGenerated = existing.assetsGenerated;
         }
     }
 
@@ -107,13 +109,28 @@ export async function saveWorldAssets(channel, worldName, assets) {
     const worldKey = `${channel}/${worldName}`;
     const worldData = await idb.get('worlds', worldKey) || {};
     worldData.assets = assets;
+    // Preserve any existing generated assets
+    if (!worldData.assetsGenerated) {
+        worldData.assetsGenerated = [];
+    }
+    await idb.set('worlds', worldKey, worldData);
+}
+
+export async function saveWorldGeneratedAssets(channel, worldName, generatedAssets) {
+    const worldKey = `${channel}/${worldName}`;
+    const worldData = await idb.get('worlds', worldKey) || {};
+    worldData.assetsGenerated = generatedAssets || [];
+    // Preserve any existing assets overrides
+    if (!worldData.assets) {
+        worldData.assets = {};
+    }
     await idb.set('worlds', worldKey, worldData);
 }
 
 export async function loadGameState(channel, worldName) {
     const worldKey = `${channel}/${worldName}`;
     const data = await idb.get('worlds', worldKey);
-    return data || { players: {}, map: {}, assets: {} };
+    return data || { players: {}, map: {}, assets: {}, assetsGenerated: [] };
 }
 
 export async function deleteWorld(channel, worldName) {
@@ -180,7 +197,8 @@ export async function exportWorldData(channel, worldName, useVerbose) {
         data: {
             players: finalPlayers,
             map: worldState.map,
-            assets: worldState.assets || {} // include asset overrides in export
+            assets: worldState.assets || {},
+            assetsGenerated: worldState.assetsGenerated || []
         },
         format: useVerbose ? 'verbose' : 'compact',
     };

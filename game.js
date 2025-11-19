@@ -34,6 +34,7 @@ export class Game {
         this.activeChoppingTargets = new Map();
         
         this.assets = {}; // Store assets overrides
+        this.generatedAssets = []; // Store AI-generated asset library for this world
 
         // Realtime communication for remote inventory
         this.room = null;
@@ -54,8 +55,7 @@ export class Game {
         }, { passive: false });
         
         this.saveInterval = setInterval(async () => {
-            // Pass this.assets to saveGameState
-            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets);
+            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets, this.generatedAssets);
         }, 5000); // Save every 5 seconds
     }
 
@@ -66,8 +66,9 @@ export class Game {
         await StorageManager.init(this.channel, this.worldName);
         const gameState = await StorageManager.loadGameState(this.channel, this.worldName);
 
-        // Load assets overrides from saved state
+        // Load assets overrides and generated assets from saved state
         this.assets = gameState.assets || {};
+        this.generatedAssets = gameState.assetsGenerated || [];
 
         if (gameState.map && gameState.map.grid && gameState.map.grid.length > 0) {
             this.map.grid = gameState.map.grid;
@@ -96,7 +97,7 @@ export class Game {
         window.addEventListener('resize', () => this.resize());
         
         this.saveInterval = setInterval(async () => {
-            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map);
+            await StorageManager.saveGameState(this.channel, this.worldName, this.players, this.map, this.assets, this.generatedAssets);
         }, 5000); // Save every 5 seconds
     }
 
@@ -164,15 +165,6 @@ export class Game {
     }
 
     start() {
-        // We first need to init to get the assets overrides, THEN load assets.
-        // But init also loads the map data which we might want before rendering.
-        // Map.loadAssets handles image loading.
-        
-        // New flow:
-        // 1. Init storage/game state (getting assets overrides)
-        // 2. Map.loadAssets(overrides)
-        // 3. Start loop
-
         this.init().then(() => {
             this.map.loadAssets(this.assets).then(() => {
                 this.lastTime = performance.now();

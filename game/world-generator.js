@@ -35,7 +35,7 @@ export async function regenerateMapFeature(channel, worldName, feature) {
     }
     const dummyMap = { grid: tempMap.grid, treeRespawns: worldState.map.treeRespawns || [] };
 
-    await StorageManager.saveGameState(channel, worldName, dummyPlayers, dummyMap);
+    await StorageManager.saveGameState(channel, worldName, dummyPlayers, dummyMap, worldState.assets || {}, worldState.assetsGenerated || []);
 
     alert(`${feature.charAt(0).toUpperCase() + feature.slice(1)} have been regenerated for "${worldName}"! The changes will be visible the next time you load the world.`);
 }
