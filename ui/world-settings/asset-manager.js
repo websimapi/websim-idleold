@@ -173,10 +173,27 @@ export function initAssetManager(channel, worldName) {
                     aspect_ratio: '1:1'
                 });
 
-                const url = result && result.url;
-                if (!url) {
+                const fluxUrl = result && result.url;
+                if (!fluxUrl) {
                     throw new Error('No URL returned from image generator.');
                 }
+
+                // Download the generated image and re-upload it to the project's file storage
+                statusEl.textContent = 'Downloading and storing generated image...';
+                const response = await fetch(fluxUrl);
+                if (!response.ok) {
+                    throw new Error('Failed to download generated image.');
+                }
+                const blob = await response.blob();
+                const fileName = `generated_${Date.now()}.png`;
+                const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+
+                const uploadedUrl = await window.websim.upload(file);
+                if (!uploadedUrl) {
+                    throw new Error('Upload did not return a URL.');
+                }
+
+                const url = uploadedUrl;
 
                 currentGenerated = {
                     id: `gen_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -192,7 +209,7 @@ export function initAssetManager(channel, worldName) {
                 previewImg.src = url;
                 previewImg.classList.remove('hidden');
                 previewPlaceholder.textContent = '';
-                statusEl.textContent = 'Image generated successfully.';
+                statusEl.textContent = 'Image generated and stored successfully.';
                 statusEl.className = 'asset-gen-status asset-gen-status-success';
 
                 acceptBtn.disabled = false;
@@ -200,7 +217,7 @@ export function initAssetManager(channel, worldName) {
                 deleteBtn.disabled = false;
             } catch (err) {
                 console.error('Image generation failed:', err);
-                statusEl.textContent = 'Failed to generate image. Please try again.';
+                statusEl.textContent = 'Failed to generate and store image. Please try again.';
                 statusEl.className = 'asset-gen-status asset-gen-status-error';
                 previewImg.classList.add('hidden');
                 previewPlaceholder.textContent = 'No image generated yet.';
