@@ -98,10 +98,25 @@ export function handlePlayerCommand(game, userId, command, args) {
         if (targetPlayer) {
             player.activeCommand = 'follow';
             player.followTargetId = targetPlayer.id;
-            if (player.isPowered()) {
+            // Only switch to FOLLOWING immediately if the player is not in the middle of a chop/gather task.
+            const busyStates = new Set([
+                PLAYER_STATE.MOVING_TO_TREE,
+                PLAYER_STATE.CHOPPING,
+                PLAYER_STATE.MOVING_TO_LOGS,
+                PLAYER_STATE.HARVESTING_LOGS,
+                PLAYER_STATE.MOVING_TO_BUSHES,
+                PLAYER_STATE.HARVESTING_BUSHES,
+                PLAYER_STATE.MOVING_TO_FLOWERS,
+                PLAYER_STATE.HARVESTING_FLOWERS,
+                PLAYER_STATE.SEARCHING_FOR_GATHERABLE,
+                PLAYER_STATE.WANDERING_TO_GATHER,
+                PLAYER_STATE.SEARCHING_FOR_TREE,
+            ]);
+            if (player.isPowered() && !busyStates.has(player.state)) {
+                // Safe to start following immediately
                 player.state = PLAYER_STATE.FOLLOWING;
             }
-            console.log(`[${player.username}] will now follow ${targetPlayer.username}.`);
+            console.log(`[${player.username}] will now follow ${targetPlayer.username}. (queued if currently busy)`);
         } else {
             console.log(`[${player.username}] Could not find anyone nearby to follow.`);
             if (player.isPowered()) {
